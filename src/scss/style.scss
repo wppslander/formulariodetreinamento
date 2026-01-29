@@ -1,0 +1,69 @@
+// Import Bootstrap SCSS
+@import "bootstrap/scss/bootstrap";
+
+// Custom Fonts
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+body {
+    background-color: #f4f6f9;
+    font-family: 'Roboto', sans-serif;
+}
+.main-container {
+    max-width: 800px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    border-top: 5px solid #0056b3;
+}
+.logo-container {
+    text-align: center;
+    margin-bottom: 30px;
+}
+.logo-container img {
+    max-width: 250px;
+    height: auto;
+}
+.form-header {
+    text-align: center;
+    margin-bottom: 40px;
+    color: #333;
+}
+.form-header h2 {
+    font-weight: 700;
+    color: #0056b3;
+    font-size: 1.8rem;
+}
+.form-header h4 {
+    font-weight: 400;
+    color: #555;
+    font-size: 1.2rem;
+    margin-top: 10px;
+}
+.intro-text {
+    background-color: #e9ecef;
+    padding: 15px;
+    border-radius: 5px;
+    font-size: 0.95rem;
+    color: #495057;
+    margin-bottom: 30px;
+    border-left: 4px solid #0056b3;
+}
+.form-label {
+    font-weight: 500;
+    color: #444;
+}
+.btn-submit {
+    background-color: #0056b3;
+    color: white;
+    padding: 12px 30px;
+    font-size: 1rem;
+    border-radius: 5px;
+    border: none;
+    width: 100%;
+    transition: background 0.3s;
+}
+.btn-submit:hover {
+    background-color: #004494;
+}

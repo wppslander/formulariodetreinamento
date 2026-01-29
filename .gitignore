@@ -1,0 +1,16 @@
+# Environments
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+vendor/
+
+# Vite / Build
+public/assets/
+vite.log
+
+# System
+.DS_Store
+Thumbs.db
