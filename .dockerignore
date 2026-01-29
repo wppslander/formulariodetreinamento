@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+.env.example
+docker-compose.yml
+Dockerfile
+README.md
+GEMINI.md
+node_modules
+vendor
+src/index.php

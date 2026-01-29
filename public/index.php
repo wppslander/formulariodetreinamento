@@ -2,8 +2,12 @@
 require_once __DIR__ . '/../vendor/autoload.php';
 
 // Load Env
-$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
-$dotenv->load();
+try {
+    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+    $dotenv->load();
+} catch (Exception $e) {
+    // .env file not found, assuming variables are set in the environment
+}
 
 // Helper to determine asset paths
 function get_vite_assets() {
