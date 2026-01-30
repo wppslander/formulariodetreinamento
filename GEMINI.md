@@ -1,63 +1,65 @@
-# Contexto do Projeto: Ferramenta de Cadastro de Treinamentos (DigitalSat)
+# Projeto: Ferramenta de Cadastro de Treinamentos (DigitalSat)
 
-Este arquivo documenta a estrutura, arquitetura e fluxos de trabalho do projeto.
+Aplicação web leve e segura para registro de treinamentos de funcionários, utilizando PHP puro e Docker.
 
-## 📋 Visão Geral do Projeto
+## 📋 Visão Geral
 
-Aplicação web interna para registro de treinamentos de funcionários. O sistema coleta dados via formulário e envia por e-mail via SMTP.
+O sistema apresenta um formulário para coleta de dados de cursos realizados pelos colaboradores e envia essas informações por e-mail para a administração via SMTP. O foco do projeto é simplicidade (KISS), segurança e portabilidade.
 
-### Stack Tecnológica (Atual)
-*   **Backend:** PHP 8.2 (Apache).
-*   **Frontend:** HTML5, Bootstrap 5, SASS (Vite Build).
+### Stack Tecnológica
+*   **Backend/Frontend:** PHP 8.2 (Apache) - Renderização Server-Side.
+*   **Estilização:** Bootstrap 5 (via CDN).
 *   **Infraestrutura:** Docker & Docker Compose.
-*   **Libs:** `phpmailer/phpmailer`, `vlucas/phpdotenv`.
+*   **Dependências PHP:** `phpmailer/phpmailer`, `vlucas/phpdotenv`.
 
 ---
 
-## 🔍 Diagnóstico e Planejamento (Refatoração KISS)
+## 🏗️ Estrutura de Arquivos
 
-Após análise realizada em 30/01/2026, foi identificado que a arquitetura atual possui complexidade desnecessária para o escopo do projeto (Build de frontend com Node.js para um formulário simples).
-
-### Metas da Refatoração
-1.  **Eliminar Build Step:** Remover dependência de Node.js/Vite.
-2.  **Frontend Leve:** Utilizar Bootstrap 5 via CDN.
-3.  **Docker Otimizado:** Migrar para build single-stage (apenas PHP).
-4.  **Segurança:** Adicionar proteção CSRF e sanitização de inputs.
-5.  **Limpeza:** Remover diretório `src/` e arquivos de configuração JS.
-
-### Estrutura de Arquivos Alvo
 ```
 /
-├── .env.example
-├── .gitignore
-├── composer.json
+├── .env              # Variáveis de ambiente (não comitado)
+├── composer.json     # Dependências PHP
 ├── docker-compose.yml
-├── Dockerfile
+├── Dockerfile        # Imagem otimizada (PHP 8.2 + Apache)
 └── public/
-    ├── index.php      # Lógica completa (View + Controller)
-    └── assets/        # Imagens estáticas (se houver)
+    └── index.php     # Aplicação Completa (View + Controller + CSRF)
 ```
 
 ---
 
-## 🏗️ Arquitetura Atual (Legado - A ser removida)
+## ⚙️ Configuração e Execução
 
-### Diretórios Principais
-*   **`src/`**: Código fonte Frontend (SASS/JS).
-*   **`public/`**: Raiz do servidor web.
-    *   `index.php`: Ponto de entrada.
-*   **`docker-compose.yml`**: Serviço `web` na porta `8080`.
+### Pré-requisitos
+*   Docker e Docker Compose instalados.
+
+### Comandos Rápidos
+
+| Ação | Comando | Descrição |
+| :--- | :--- | :--- |
+| **Iniciar** | `docker compose up -d --build` | Inicia o servidor em `localhost:8080`. |
+| **Parar** | `docker compose down` | Para os containers. |
+| **Logs** | `docker compose logs -f` | Acompanha logs do servidor. |
+
+### Configuração `.env`
+
+Crie um arquivo `.env` na raiz (baseado no `.env.example`) com as credenciais SMTP:
+
+```ini
+APP_ENV=production
+SMTP_HOST=smtp.exemplo.com
+SMTP_PORT=587
+SMTP_USER=seu_email@exemplo.com
+SMTP_PASS=sua_senha
+```
+
+*   **Modo Local:** Se `APP_ENV=local`, os e-mails não são enviados via SMTP, mas sim gerados como arquivos HTML de mock (`email_mock.html`) na raiz do container para testes seguros.
 
 ---
 
-## ⚙️ Configuração (Atual)
+## 🛡️ Segurança Implementada
 
-### Comandos
-| Ação | Comando |
-| :--- | :--- |
-| **Instalar Deps** | `docker run --rm -v $(pwd):/app -w /app composer install` |
-| **Subir** | `docker compose up -d` |
-
-### Variáveis (`.env`)
-*   `APP_ENV`: `local` vs `production`.
-*   SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`.
+1.  **CSRF Protection:** Token único gerado por sessão para evitar submissões falsas.
+2.  **Sanitização:** Todos os inputs são limpos (`htmlspecialchars`, `strip_tags`) antes do processamento.
+3.  **Validação:** Validação visual no frontend (Bootstrap) e verificação de integridade no backend.
+4.  **Docker:** Imagem baseada em container oficial PHP, sem build tools desnecessárias em produção.
