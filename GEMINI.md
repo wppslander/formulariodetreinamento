@@ -1,65 +1,68 @@
 # Projeto: Ferramenta de Cadastro de Treinamentos (DigitalSat)
 
-Aplicação web leve e segura para registro de treinamentos de funcionários, utilizando PHP puro e Docker.
+Aplicação web leve, segura e otimizada para registro de treinamentos de funcionários. O sistema foi refatorado seguindo o princípio **KISS** (Keep It Simple, Stupid) para eliminar complexidade desnecessária e maximizar a segurança.
 
 ## 📋 Visão Geral
 
-O sistema apresenta um formulário para coleta de dados de cursos realizados pelos colaboradores e envia essas informações por e-mail para a administração via SMTP. O foco do projeto é simplicidade (KISS), segurança e portabilidade.
+O sistema coleta dados de treinamentos via formulário web e envia notificações detalhadas por e-mail (com anexos) via SMTP.
 
 ### Stack Tecnológica
-*   **Backend/Frontend:** PHP 8.2 (Apache) - Renderização Server-Side.
-*   **Estilização:** Bootstrap 5 (via CDN).
-*   **Infraestrutura:** Docker & Docker Compose.
-*   **Dependências PHP:** `phpmailer/phpmailer`, `vlucas/phpdotenv`.
+*   **Backend/Frontend:** PHP 8.2 (Apache) - Single File Architecture (`public/index.php`).
+*   **Estilização:** Bootstrap 5.3 (via CDN).
+*   **Infraestrutura:** Docker & Docker Compose (Multi-Stage Build).
+*   **Libs:** `phpmailer/phpmailer`, `vlucas/phpdotenv`.
 
 ---
 
 ## 🏗️ Estrutura de Arquivos
 
+A estrutura foi simplificada para facilitar a manutenção e o deploy.
+
 ```
 /
-├── .env              # Variáveis de ambiente (não comitado)
-├── composer.json     # Dependências PHP
+├── .env.example      # Modelo de configuração
+├── composer.json     # Dependências (PHPMailer, Dotenv)
 ├── docker-compose.yml
-├── Dockerfile        # Imagem otimizada (PHP 8.2 + Apache)
+├── Dockerfile        # Build Multi-Stage (Builder -> Production)
 └── public/
-    └── index.php     # Aplicação Completa (View + Controller + CSRF)
+    └── index.php     # Aplicação: Lógica, View, Segurança e Envio.
 ```
 
 ---
 
 ## ⚙️ Configuração e Execução
 
-### Pré-requisitos
-*   Docker e Docker Compose instalados.
-
 ### Comandos Rápidos
 
 | Ação | Comando | Descrição |
 | :--- | :--- | :--- |
-| **Iniciar** | `docker compose up -d --build` | Inicia o servidor em `localhost:8080`. |
-| **Parar** | `docker compose down` | Para os containers. |
-| **Logs** | `docker compose logs -f` | Acompanha logs do servidor. |
+| **Deploy/Iniciar** | `docker compose up -d --build` | Compila a imagem otimizada e inicia em `:8080`. |
+| **Parar** | `docker compose down` | Encerra os containers. |
+| **Ver Logs** | `docker compose logs -f` | Monitoramento em tempo real. |
 
 ### Configuração `.env`
 
-Crie um arquivo `.env` na raiz (baseado no `.env.example`) com as credenciais SMTP:
-
-```ini
-APP_ENV=production
-SMTP_HOST=smtp.exemplo.com
-SMTP_PORT=587
-SMTP_USER=seu_email@exemplo.com
-SMTP_PASS=sua_senha
-```
-
-*   **Modo Local:** Se `APP_ENV=local`, os e-mails não são enviados via SMTP, mas sim gerados como arquivos HTML de mock (`email_mock.html`) na raiz do container para testes seguros.
+Copie `.env.example` para `.env` e configure:
+*   **`APP_ENV`**: Use `production` para envio real. Se `local`, gera arquivo `public/email_mock.html`.
+*   **SMTP Credentials**: Dados do servidor de e-mail.
 
 ---
 
-## 🛡️ Segurança Implementada
+## 🛡️ Segurança (Hardened)
 
-1.  **CSRF Protection:** Token único gerado por sessão para evitar submissões falsas.
-2.  **Sanitização:** Todos os inputs são limpos (`htmlspecialchars`, `strip_tags`) antes do processamento.
-3.  **Validação:** Validação visual no frontend (Bootstrap) e verificação de integridade no backend.
-4.  **Docker:** Imagem baseada em container oficial PHP, sem build tools desnecessárias em produção.
+O projeto implementa camadas rigorosas de segurança para operar em produção:
+
+1.  **CSRF Protection:** Token criptográfico único por sessão para prevenir falsificação de requisição.
+2.  **Rate Limiting:** Bloqueio de envio em massa (trottle de 30 segundos por sessão).
+3.  **Strict Whitelisting:** Validação de entradas (`filial`, `tipo_treinamento`) contra listas permitidas restritas.
+4.  **Secure Upload:**
+    *   Validação de **MIME Type Real** (conteúdo binário) do arquivo.
+    *   Limite de tamanho (5MB).
+    *   Permite apenas PDF e Imagens.
+5.  **Session Hardening:** Cookies configurados com `HttpOnly`, `Secure` (se HTTPS) e `SameSite=Strict`.
+6.  **Sanitização:** Todos os inputs passam por `htmlspecialchars` e `strip_tags`.
+
+## 🐳 Otimização Docker
+Utiliza **Multi-Stage Build**:
+1.  **Stage 1 (Builder):** Instala dependências do sistema (Git, Zip) e roda `composer install`.
+2.  **Stage 2 (Final):** Imagem limpa contendo apenas PHP+Apache e o código fonte. Sem restos de cache ou ferramentas de build.
