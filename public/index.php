@@ -1,5 +1,16 @@
 <?php
+// Segurança de Sessão (Cookie Hardening)
+$cookieParams = [
+    'lifetime' => 0, // Até fechar o navegador
+    'path' => '/',
+    'domain' => '',
+    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on', // Apenas HTTPS se disponível
+    'httponly' => true, // Impede acesso via JS (Mitiga XSS)
+    'samesite' => 'Strict' // Mitiga CSRF
+];
+session_set_cookie_params($cookieParams);
 session_start();
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 // Carregar variáveis de ambiente
@@ -7,10 +18,19 @@ try {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
     $dotenv->load();
 } catch (Exception $e) {
-    // Ignorar se não houver .env (produção pode usar env vars do sistema)
+    // Ignorar se não houver .env
 }
 
-// Gerar Token CSRF se não existir
+// Configurações e Listas Permitidas (Whitelisting)
+$filiais_permitidas = [
+    'matriz', 'aptec', 'blumenau', 'itapema', 'balneario_camboriu', 
+    'itajai', 'brusque', 'joinville', 'rio_do_sul', 'gravatai', 
+    'lages', 'sao_jose', 'tubarao'
+];
+
+$tipos_permitidos = ['presencial', 'online_vivo', 'online_gravado', 'outro'];
+
+// Gerar Token CSRF
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -19,50 +39,101 @@ $message = '';
 
 // Processar Formulário
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // 1. Validação CSRF
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        die('Erro de Segurança: Token CSRF inválido.');
-    }
-
-    // 2. Sanitização de Inputs
-    $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
-    $nome = htmlspecialchars(strip_tags($_POST['nome'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $filial = htmlspecialchars(strip_tags($_POST['filial'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $departamento = htmlspecialchars(strip_tags($_POST['departamento'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $curso = htmlspecialchars(strip_tags($_POST['curso'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $tipo = htmlspecialchars(strip_tags($_POST['tipo_treinamento'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $duracao = htmlspecialchars(strip_tags($_POST['duracao'] ?? ''), ENT_QUOTES, 'UTF-8');
-    
-    // Tratamento para "Outro" tipo
-    if ($tipo === 'outro') {
-        $outro_texto = htmlspecialchars(strip_tags($_POST['outro_texto'] ?? ''), ENT_QUOTES, 'UTF-8');
-        $tipo .= " ({$outro_texto})";
-    }
-
-    // Preparar Corpo do E-mail
-    $body = "<h2>Registro de Treinamento</h2>";
-    $body .= "<p><strong>Funcionário:</strong> {$nome}</p>";
-    $body .= "<p><strong>E-mail:</strong> {$email}</p>";
-    $body .= "<p><strong>Filial:</strong> " . ucfirst($filial) . "</p>";
-    $body .= "<p><strong>Departamento:</strong> {$departamento}</p>";
-    $body .= "<hr>";
-    $body .= "<p><strong>Curso:</strong> {$curso}</p>";
-    $body .= "<p><strong>Tipo:</strong> " . ucfirst(str_replace('_', ' ', $tipo)) . "</p>";
-    $body .= "<p><strong>Duração:</strong> {$duracao}</p>";
-    $body .= "<p><small>Enviado em: " . date('d/m/Y H:i:s') . "</small></p>";
-
-    // Mock para Ambiente Local
-    $isDev = ($_ENV['APP_ENV'] ?? 'production') === 'local';
-    
-    if ($isDev) {
-        $mockFile = __DIR__ . '/email_mock.html';
-        file_put_contents($mockFile, $body);
-        $message = '<div class="alert alert-info border-0 shadow-sm">Ambiente Local: <a href="email_mock.html" target="_blank" class="fw-bold">Ver e-mail simulado</a></div>';
-    }
-
-    // Envio Real via PHPMailer
-    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
     try {
+        // 1. Validação CSRF
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+            throw new Exception("Erro de Segurança: Sessão expirada ou inválida. Recarregue a página.");
+        }
+
+        // 2. Rate Limiting (Anti-Spam) - 30 segundos
+        if (isset($_SESSION['last_submit']) && (time() - $_SESSION['last_submit'] < 30)) {
+            throw new Exception("Aguarde alguns segundos antes de enviar novamente.");
+        }
+
+        // 3. Validação de Inputs (Whitelisting & Sanitização)
+        $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new Exception("E-mail inválido.");
+        }
+
+        $nome = trim(htmlspecialchars(strip_tags($_POST['nome'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        if (strlen($nome) < 3) throw new Exception("Nome muito curto.");
+
+        $filial = $_POST['filial'] ?? '';
+        if (!in_array($filial, $filiais_permitidas)) {
+            throw new Exception("Filial selecionada inválida.");
+        }
+
+        $departamento = trim(htmlspecialchars(strip_tags($_POST['departamento'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        $curso = trim(htmlspecialchars(strip_tags($_POST['curso'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        
+        $tipo = $_POST['tipo_treinamento'] ?? '';
+        if (!in_array($tipo, $tipos_permitidos)) {
+            throw new Exception("Tipo de treinamento inválido.");
+        }
+
+        $duracao = trim(htmlspecialchars(strip_tags($_POST['duracao'] ?? ''), ENT_QUOTES, 'UTF-8'));
+
+        // Tratamento para "Outro"
+        if ($tipo === 'outro') {
+            $outro_texto = trim(htmlspecialchars(strip_tags($_POST['outro_texto'] ?? ''), ENT_QUOTES, 'UTF-8'));
+            if (empty($outro_texto)) throw new Exception("Especifique o tipo de treinamento.");
+            $tipo .= " ({$outro_texto})";
+        }
+
+        // 4. Validação e Segurança de Arquivo
+        $anexoPath = null;
+        $anexoNome = null;
+
+        if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] !== UPLOAD_ERR_NO_FILE) {
+            $arquivo = $_FILES['comprovante'];
+
+            // Erro de Upload
+            if ($arquivo['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception("Erro no upload do arquivo.");
+            }
+
+            // Validar Tamanho (Max 5MB)
+            if ($arquivo['size'] > 5 * 1024 * 1024) {
+                throw new Exception("O arquivo excede o limite de 5MB.");
+            }
+
+            // Validar Tipo Real (MIME Type)
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mimeReal = $finfo->file($arquivo['tmp_name']);
+            $mimesPermitidos = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+
+            if (!in_array($mimeReal, $mimesPermitidos)) {
+                throw new Exception("Formato de arquivo não permitido. Apenas PDF, JPG ou PNG.");
+            }
+
+            $anexoPath = $arquivo['tmp_name'];
+            $anexoNome = $arquivo['name'];
+        }
+
+        // --- Envio do E-mail ---
+        
+        $body = "<h2>Registro de Treinamento</h2>";
+        $body .= "<p><strong>Funcionário:</strong> {$nome}</p>";
+        $body .= "<p><strong>E-mail:</strong> {$email}</p>";
+        $body .= "<p><strong>Filial:</strong> " . ucfirst($filial) . "</p>";
+        $body .= "<p><strong>Departamento:</strong> {$departamento}</p>";
+        $body .= "<hr>";
+        $body .= "<p><strong>Curso:</strong> {$curso}</p>";
+        $body .= "<p><strong>Tipo:</strong> " . ucfirst(str_replace('_', ' ', $tipo)) . "</p>";
+        $body .= "<p><strong>Duração:</strong> {$duracao}</p>";
+        $body .= "<p><small>Enviado em: " . date('d/m/Y H:i:s') . "</small></p>";
+
+        // Mock Local
+        $isDev = ($_ENV['APP_ENV'] ?? 'production') === 'local';
+        if ($isDev) {
+            $mockFile = __DIR__ . '/email_mock.html';
+            file_put_contents($mockFile, $body);
+            $message = '<div class="alert alert-info border-0 shadow-sm">Ambiente Local: <a href="email_mock.html" target="_blank" class="fw-bold">Ver e-mail simulado</a></div>';
+        }
+
+        // PHPMailer
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
         $mail->CharSet    = 'UTF-8';
         $mail->isSMTP();
         $mail->Host       = $_ENV['SMTP_HOST'];
@@ -82,20 +153,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mail->Subject = "Treinamento: {$nome} - " . ucfirst($filial);
         $mail->Body = $body;
 
-        // Anexo
-        if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] == UPLOAD_ERR_OK) {
-            $mail->addAttachment($_FILES['comprovante']['tmp_name'], $_FILES['comprovante']['name']);
+        if ($anexoPath) {
+            $mail->addAttachment($anexoPath, $anexoNome);
         }
 
         $mail->send();
-        $message .= '<div class="alert alert-success border-0 shadow-sm">✅ Registro enviado com sucesso!</div>';
         
-        // Limpar campos após sucesso (opcional, aqui mantemos o POST para UX ou redirecionamos)
-        // header("Location: " . $_SERVER['PHP_SELF'] . "?status=success"); exit;
+        // Sucesso: Atualizar timestamp de envio
+        $_SESSION['last_submit'] = time();
+        $message .= '<div class="alert alert-success border-0 shadow-sm">✅ Registro enviado com sucesso!</div>';
 
     } catch (Exception $e) {
-        $errorMsg = $isDev ? $mail->ErrorInfo : 'Contate o administrador.';
-        $message = '<div class="alert alert-danger border-0 shadow-sm">❌ Erro ao enviar: ' . $errorMsg . '</div>';
+        $msgErro = $e->getMessage();
+        if ($e instanceof PHPMailer\PHPMailer\Exception) {
+             // Esconder erro técnico do PHPMailer em produção, mas mostrar em dev
+             $msgErro = $isDev ? $mail->ErrorInfo : "Erro ao conectar com servidor de e-mail.";
+        }
+        $message = '<div class="alert alert-danger border-0 shadow-sm">❌ ' . $msgErro . '</div>';
     }
 }
 ?>
@@ -106,82 +180,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Levantamento de Treinamentos - DigitalSat</title>
     
-    <!-- Bootstrap 5 CSS (CDN) -->
+    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
-            background-color: #f4f6f9;
-            font-family: 'Roboto', sans-serif;
-            color: #333;
-        }
-        .main-container {
-            max-width: 800px;
-            margin: 40px auto;
-            background: #fff;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-            border-top: 6px solid #0056b3;
-        }
-        .logo-container {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .logo-container img {
-            max-width: 220px;
-            height: auto;
-        }
-        .form-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .form-header h2 {
-            font-weight: 700;
-            color: #0056b3;
-            font-size: 1.6rem;
-        }
-        .intro-text {
-            background-color: #eef2f7;
-            padding: 20px;
-            border-radius: 8px;
-            font-size: 0.95rem;
-            color: #495057;
-            margin-bottom: 30px;
-            border-left: 4px solid #0056b3;
-        }
-        .form-label {
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            color: #555;
-        }
-        .btn-submit {
-            background-color: #0056b3;
-            color: white;
-            padding: 14px 30px;
-            font-size: 1.1rem;
-            border-radius: 8px;
-            border: none;
-            width: 100%;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        .btn-submit:hover {
-            background-color: #004494;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,86,179,0.2);
-        }
-        /* Ajuste para validação do Bootstrap */
-        .was-validated .form-control:invalid {
-            border-color: #dc3545;
-            padding-right: calc(1.5em + .75rem);
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5zM6 8.2a.75.75 0 110-1.5.75.75 0 010 1.5z'/%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right calc(.375em + .1875rem) center;
-            background-size: calc(.75em + .375rem) calc(.75em + .375rem);
-        }
+        body { background-color: #f4f6f9; font-family: 'Roboto', sans-serif; color: #333; }
+        .main-container { max-width: 800px; margin: 40px auto; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border-top: 6px solid #0056b3; }
+        .logo-container { text-align: center; margin-bottom: 30px; }
+        .logo-container img { max-width: 220px; height: auto; }
+        .form-header { text-align: center; margin-bottom: 30px; }
+        .form-header h2 { font-weight: 700; color: #0056b3; font-size: 1.6rem; }
+        .intro-text { background-color: #eef2f7; padding: 20px; border-radius: 8px; font-size: 0.95rem; color: #495057; margin-bottom: 30px; border-left: 4px solid #0056b3; }
+        .form-label { font-weight: 500; margin-bottom: 0.5rem; color: #555; }
+        .btn-submit { background-color: #0056b3; color: white; padding: 14px 30px; font-size: 1.1rem; border-radius: 8px; border: none; width: 100%; font-weight: 500; transition: all 0.3s ease; }
+        .btn-submit:hover { background-color: #004494; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,86,179,0.2); }
+        .was-validated .form-control:invalid { border-color: #dc3545; background-image: url("data:image/svg+xml,..."); }
     </style>
 </head>
 <body>
@@ -191,7 +205,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php echo $message; ?>
 
         <div class="logo-container">
-            <!-- Placeholder para Logo, substitua a URL se necessário -->
             <img src="https://loja.digitalsat.com.br/imagem/logo-store?v=68468041b7f0a7698a97772f2c9fda4d" alt="DigitalSat Logo">
         </div>
 
@@ -205,7 +218,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <form action="" method="POST" enctype="multipart/form-data" class="needs-validation" novalidate>
-            <!-- Token CSRF -->
             <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
 
             <div class="row g-3">
@@ -215,31 +227,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="col-md-6">
                     <label for="nome" class="form-label">Nome Completo</label>
-                    <input type="text" class="form-control" id="nome" name="nome" required>
+                    <input type="text" class="form-control" id="nome" name="nome" required minlength="3">
                 </div>
 
                 <div class="col-md-6">
                     <label for="filial" class="form-label">Filial</label>
                     <select class="form-select" id="filial" name="filial" required>
                         <option value="" selected disabled>Selecione...</option>
-                        <option value="matriz">Matriz</option>
-                        <option value="aptec">APTEC</option>
-                        <option value="blumenau">Blumenau</option>
-                        <option value="itapema">Itapema</option>
-                        <option value="balneario_camboriu">Balneário Camboriú</option>
-                        <option value="itajai">Itajaí</option>
-                        <option value="brusque">Brusque</option>
-                        <option value="joinville">Joinville</option>
-                        <option value="rio_do_sul">Rio do Sul</option>
-                        <option value="gravatai">Gravataí</option>
-                        <option value="lages">Lages</option>
-                        <option value="sao_jose">São José</option>
-                        <option value="tubarao">Tubarão</option>
+                        <?php foreach($filiais_permitidas as $f): ?>
+                            <option value="<?php echo $f; ?>"><?php echo ucfirst(str_replace('_', ' ', $f)); ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="col-md-6">
                     <label for="departamento" class="form-label">Departamento</label>
-                    <input type="text" class="form-control" id="departamento" name="departamento" required placeholder="Ex: Comercial, TI...">
+                    <input type="text" class="form-control" id="departamento" name="departamento" required>
                 </div>
             </div>
 
@@ -281,7 +283,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="mb-4">
                 <label for="comprovante" class="form-label">Certificado ou Comprovante (Opcional)</label>
                 <input class="form-control" type="file" id="comprovante" name="comprovante" accept=".pdf,.jpg,.png,.jpeg">
-                <div class="form-text">Aceita PDF ou Imagens (Max 5MB recomendado).</div>
+                <div class="form-text">Aceita PDF, JPG, PNG (Max 5MB).</div>
             </div>
 
             <button type="submit" class="btn btn-submit">
@@ -295,11 +297,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </div>
 
-<!-- Bootstrap JS Bundle -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
-    // Lógica para campo 'Outro'
     const radioButtons = document.querySelectorAll('input[name="tipo_treinamento"]');
     const outroInput = document.getElementById('outro_texto');
 
@@ -317,7 +316,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
     });
 
-    // Validação Bootstrap
     (() => {
         'use strict'
         const forms = document.querySelectorAll('.needs-validation')
@@ -332,6 +330,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         })
     })()
 </script>
-
 </body>
 </html>
