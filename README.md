@@ -17,10 +17,15 @@ Configure as credenciais de e-mail (SMTP) antes de rodar:
 2.  Edite o `.env` com seus dados:
     ```ini
     APP_ENV=production          # Use 'local' para simular envio (cria arquivo .html)
+    
+    # Configurações SMTP
     SMTP_HOST=smtp.exemplo.com
     SMTP_PORT=587
     SMTP_USER=email@digitalsat.com.br
     SMTP_PASS=sua_senha
+    
+    # Token de Segurança para Relatórios (RH)
+    ADMIN_TOKEN=defina_uma_senha_forte_aqui
     ```
 
 ### 3. Executando (Docker)
@@ -30,6 +35,25 @@ Na raiz do projeto:
 docker compose up -d --build
 ```
 Acesse: **http://localhost:8080**
+
+---
+
+## 📊 Auditoria e Relatórios (NOVO)
+
+O sistema mantém um registro permanente (CSV) de todos os envios para fins de auditoria.
+
+*   **Localização:** Os arquivos são salvos na pasta `./reports/` (persistida fora do container).
+*   **Dados Coletados:** Data/Hora, Dados do Funcionário, Curso, Duração e **IP de Origem** (com suporte a Proxy/X-Forwarded-For).
+
+### Envio de Relatório para o RH
+Para enviar o CSV acumulado para o e-mail do RH (`rh@digitalsat.com.br`), acesse a seguinte URL no navegador (ou configure um Cron Job):
+
+```
+http://seu-servidor:8080/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
+```
+
+*   O token deve ser o mesmo configurado em `ADMIN_TOKEN` no arquivo `.env`.
+*   Se o token for inválido, o acesso será negado.
 
 ---
 
