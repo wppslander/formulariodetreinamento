@@ -55,6 +55,13 @@ function registrar_log_master($dados) {
         }
 
         // Dados da linha
+        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_CLIENT_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        
+        // Se houver múltiplos IPs no X-Forwarded-For (vírgula), pega o primeiro
+        if (strpos($ip, ',') !== false) {
+            $ip = explode(',', $ip)[0];
+        }
+
         fputcsv($handle, [
             date('Y-m-d H:i:s'),
             $dados['nome'],
@@ -64,7 +71,7 @@ function registrar_log_master($dados) {
             $dados['curso'],
             $dados['tipo'],
             $dados['duracao'],
-            $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'
+            trim($ip)
         ]);
 
         flock($handle, LOCK_UN);
