@@ -195,7 +195,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .form-label { font-weight: 500; margin-bottom: 0.5rem; color: #555; }
         .btn-submit { background-color: #0056b3; color: white; padding: 14px 30px; font-size: 1.1rem; border-radius: 8px; border: none; width: 100%; font-weight: 500; transition: all 0.3s ease; }
         .btn-submit:hover { background-color: #004494; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,86,179,0.2); }
-        .was-validated .form-control:invalid { border-color: #dc3545; background-image: url("data:image/svg+xml,..."); }
     </style>
 </head>
 <body>
