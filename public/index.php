@@ -79,7 +79,53 @@ function registrar_log_master($dados) {
     }
 }
 
+// Função para Enviar Relatório (Admin)
+function enviar_relatorio_rh() {
+    $arquivo = __DIR__ . '/../reports/treinamentos_master.csv';
+    
+    if (!file_exists($arquivo)) {
+        die("Nenhum relatório encontrado para enviar.");
+    }
+
+    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+    try {
+        $mail->CharSet = 'UTF-8';
+        $mail->isSMTP();
+        $mail->Host       = $_ENV['SMTP_HOST'];
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $_ENV['SMTP_USER'];
+        $mail->Password   = $_ENV['SMTP_PASS'];
+        $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = $_ENV['SMTP_PORT'];
+
+        $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Sistema');
+        $mail->addAddress('rh@digitalsat.com.br');
+        
+        $mail->isHTML(true);
+        $mail->Subject = "[AUDITORIA] Relatório Geral de Treinamentos - " . date('d/m/Y');
+        $mail->Body = "Seguem em anexo todos os registros de treinamento até o momento.";
+        
+        $mail->addAttachment($arquivo, 'relatorio_treinamentos_' . date('Ymd') . '.csv');
+        
+        $mail->send();
+        echo "Relatório enviado com sucesso para rh@digitalsat.com.br!";
+    } catch (Exception $e) {
+        echo "Erro ao enviar relatório: {$mail->ErrorInfo}";
+    }
+    exit;
+}
+
 $message = '';
+
+// Gatilho Admin (Ex: ?action=enviar_relatorio&token=SEGREDO)
+if (isset($_GET['action']) && $_GET['action'] === 'enviar_relatorio') {
+    $token = $_GET['token'] ?? '';
+    if ($token === ($_ENV['ADMIN_TOKEN'] ?? '')) {
+        enviar_relatorio_rh();
+    } else {
+        die("Acesso Negado.");
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
