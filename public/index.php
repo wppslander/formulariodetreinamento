@@ -137,18 +137,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception("Aguarde alguns segundos antes de enviar novamente.");
         }
 
-        // Sanitização e Validação
-        $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
-        $nome = trim(htmlspecialchars(strip_tags($_POST['nome'] ?? ''), ENT_QUOTES, 'UTF-8'));
-        $filial = $_POST['filial'] ?? '';
-        $departamento = trim(htmlspecialchars(strip_tags($_POST['departamento'] ?? ''), ENT_QUOTES, 'UTF-8'));
-        $curso = trim(htmlspecialchars(strip_tags($_POST['curso'] ?? ''), ENT_QUOTES, 'UTF-8'));
         $tipo = $_POST['tipo_treinamento'] ?? '';
-        $duracao = trim(htmlspecialchars(strip_tags($_POST['duracao'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        if (!in_array($tipo, $tipos_permitidos)) {
+            throw new Exception("Tipo de treinamento inválido.");
+        }
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new Exception("E-mail inválido.");
-        if (!in_array($filial, $filiais_permitidas)) throw new Exception("Filial inválida.");
-        if (!in_array($tipo, $tipos_permitidos)) throw new Exception("Tipo inválido.");
+        // Processamento de Duração (Horas + Minutos) -> Total Minutos
+        $horas = filter_input(INPUT_POST, 'duracao_horas', FILTER_VALIDATE_INT) ?: 0;
+        $minutos = filter_input(INPUT_POST, 'duracao_minutos', FILTER_VALIDATE_INT) ?: 0;
+        
+        if ($horas < 0 || $minutos < 0 || ($horas == 0 && $minutos == 0)) {
+            throw new Exception("Informe uma duração válida para o curso.");
+        }
+        
+        // CSV: Salva total em minutos (Inteiro)
+        $total_minutos = ($horas * 60) + $minutos;
+        
+        // E-mail: Exibe formatado (04h 30m)
+        $duracao_formatada = sprintf("%02dh %02dm", $horas, $minutos);
 
         if ($tipo === 'outro') {
             $outro_texto = trim(htmlspecialchars(strip_tags($_POST['outro_texto'] ?? ''), ENT_QUOTES, 'UTF-8'));
@@ -172,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $mail->isHTML(true);
         $mail->Subject = "Treinamento: {$nome} - " . ucfirst($filial);
-        $mail->Body = "<h3>Registro de Treinamento</h3><p><strong>Nome:</strong> {$nome}</p><p><strong>Curso:</strong> {$curso}</p>";
+        $mail->Body = "<h3>Registro de Treinamento</h3><p><strong>Nome:</strong> {$nome}</p><p><strong>Curso:</strong> {$curso}</p><p><strong>Duração:</strong> {$duracao_formatada}</p>";
 
         if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] == UPLOAD_ERR_OK) {
             $mail->addAttachment($_FILES['comprovante']['tmp_name'], $_FILES['comprovante']['name']);
@@ -188,7 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'departamento' => $departamento,
             'curso' => $curso,
             'tipo' => $tipo,
-            'duracao' => $duracao
+            'duracao' => $total_minutos // Salva como INTEIRO (minutos totais)
         ]);
         
         $_SESSION['last_submit'] = time();
@@ -298,8 +304,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <div class="mb-3">
-                <label for="duracao" class="form-label">Carga Horária</label>
-                <input type="text" class="form-control" id="duracao" name="duracao" required placeholder="Ex: 4h">
+                <label class="form-label">Carga Horária</label>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="duracao_horas" name="duracao_horas" min="0" required placeholder="0">
+                            <span class="input-group-text">Horas</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="duracao_minutos" name="duracao_minutos" min="0" max="59" required placeholder="0">
+                            <span class="input-group-text">Minutos</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="mb-4">
