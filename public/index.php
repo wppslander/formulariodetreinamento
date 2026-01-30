@@ -375,6 +375,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!form.checkValidity()) {
                     event.preventDefault()
                     event.stopPropagation()
+                } else {
+                    // Formulário válido: Bloqueia o botão e mostra feedback
+                    const btn = form.querySelector('button[type="submit"]');
+                    const originalText = btn.innerHTML;
+                    
+                    // Pequeno delay visual para garantir que o user veja a mudança antes do post
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
                 }
                 form.classList.add('was-validated')
             }, false)
