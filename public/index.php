@@ -250,8 +250,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label for="email" class="form-label">Seu E-mail Corporativo</label>
-                    <input type="email" class="form-control" id="email" name="email" required placeholder="nome@digitalsat.com.br">
+                    <label for="email" class="form-label">E-mail</label>
+                    <input type="email" class="form-control" id="email" name="email" required placeholder="seu@email.com">
                 </div>
                 <div class="col-md-6">
                     <label for="nome" class="form-label">Nome Completo</label>
