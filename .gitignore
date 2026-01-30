@@ -1,16 +1,21 @@
-# Environments
+# Ambientes
 .env
-.env.*
-!.env.example
+.env.backup
+.env.local
 
-# Dependencies
-node_modules/
+# Dependências PHP
 vendor/
+composer.lock
 
-# Vite / Build
-public/assets/
-vite.log
-
-# System
+# Logs e Temporários de Sistema
 .DS_Store
 Thumbs.db
+error_log
+*.log
+
+# Mock de E-mail (Desenvolvimento Local)
+public/email_mock.html
+
+# IDEs
+.idea/
+.vscode/

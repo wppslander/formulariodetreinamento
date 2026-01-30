@@ -1,6 +1,6 @@
 # Ferramenta de Cadastro de Treinamentos - DigitalSat
 
-Este projeto é um formulário web moderno para registro interno de treinamentos, utilizando **PHP 8.2** no backend, **Vite** para build de assets (CSS/JS) e **Docker** para containerização.
+Aplicação web leve e segura para registro interno de treinamentos. Desenvolvida em **PHP 8.2** puro, utilizando **Docker** para portabilidade e **Bootstrap 5** (CDN) para o frontend. Focada na simplicidade (KISS) e segurança.
 
 ## 🚀 Como Iniciar
 
@@ -8,77 +8,53 @@ Este projeto é um formulário web moderno para registro interno de treinamentos
 Certifique-se de ter o [Docker](https://www.docker.com/) e o [Docker Compose](https://docs.docker.com/compose/) instalados.
 
 ### 2. Configuração Inicial
-Antes de subir o servidor, configure as credenciais de e-mail:
+Configure as credenciais de e-mail (SMTP) antes de rodar:
 
-1.  Renomeie o arquivo de exemplo:
+1.  Crie o arquivo `.env` na raiz (copie do exemplo):
     ```bash
     cp .env.example .env
     ```
-2.  Abra o arquivo `.env` e preencha com seus dados de SMTP:
+2.  Edite o `.env` com seus dados:
     ```ini
+    APP_ENV=production          # Use 'local' para simular envio (cria arquivo .html)
     SMTP_HOST=smtp.exemplo.com
     SMTP_PORT=587
-    SMTP_USER=seu_email@digitalsat.com.br
-    SMTP_PASS=sua_senha_secreta
+    SMTP_USER=email@digitalsat.com.br
+    SMTP_PASS=sua_senha
     ```
 
-### 3. Subindo o Ambiente (Produção)
-Execute o comando abaixo na raiz do projeto:
+### 3. Executando (Docker)
+Na raiz do projeto:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 Acesse: **http://localhost:8080**
 
-### 💻 4. Modo Desenvolvimento (Live Reload)
-Para que o site atualize automaticamente ao mexer no CSS/JS:
+---
 
-1.  No arquivo `.env`, garanta que:
-    ```ini
-    APP_ENV=local
-    ```
-2.  Em um terminal separado, inicie o Vite:
-    ```bash
-    npm run dev
-    ```
-    *Isso iniciará um servidor local na porta 5173 que conversa com o PHP.*
+## 🛠️ Desenvolvimento e Manutenção
+
+Toda a lógica e visual estão centralizados em um único arquivo para facilitar a manutenção.
+
+### Arquivo Principal: `public/index.php`
+*   **PHP (Topo):** Contém a lógica de segurança (CSRF, Rate Limit), validação de formulário e envio de e-mail (PHPMailer).
+*   **HTML (Meio):** Estrutura do formulário.
+*   **CSS/JS (Fim):** Estilos customizados e validações de frontend.
+
+### Configurações Importantes
+No início do arquivo `public/index.php`, você pode alterar:
+*   `$filiais_permitidas`: Lista de filiais aceitas no formulário.
+*   `$tipos_permitidos`: Tipos de treinamento válidos.
+
+### Logs e Debug
+Se `APP_ENV=local`, os e-mails **não** são enviados de verdade. Eles são salvos como `email_mock.html` na raiz do container/projeto para validação visual.
 
 ---
 
-## 🛠️ Como Alterar e Desenvolver
-
-A estrutura do projeto separa claramente o código fonte (frontend) do código público (backend/servidor).
-
-### 🎨 1. Alterar Estilos (CSS/SASS)
-Os estilos estão em `src/scss/style.scss`.
-O projeto usa **Bootstrap 5**. Você pode sobrescrever variáveis ou adicionar classes personalizadas neste arquivo.
-
-Após alterar, você precisa recompilar os assets:
-```bash
-npm run build
-```
-
-### 🧠 2. Alterar Funcionalidade (PHP/HTML)
-O arquivo principal é `public/index.php`.
-*   **HTML do Formulário:** Edite este arquivo para adicionar/remover campos ou mudar textos.
-*   **Lógica de E-mail:** O código PHP no topo deste arquivo controla o envio.
-*   **Listas (Ex: Filiais):** Procure pela tag `<select>` dentro do HTML para adicionar novas opções.
-
-### ⚡ 3. Alterar Scripts (JavaScript)
-O JavaScript principal está em `src/js/main.js`.
-Atualmente ele apenas importa o Bootstrap, mas você pode adicionar validações ou interações personalizadas aqui.
-Lembre-se de rodar `npm run build` após as alterações.
-
-### 📦 4. Instalar Novas Dependências
-*   **PHP:** Use `docker run --rm -v $(pwd):/app -w /app composer require nome/pacote`
-*   **Node/Frontend:** Use `npm install nome-pacote`
-
----
-
-## 📂 Estrutura de Pastas
-
-*   `src/` -> Código fonte Frontend (SCSS, JS) - Onde você trabalha o visual.
-*   `public/` -> Arquivos servidos pelo Apache (PHP, Assets compilados) - Onde fica a lógica e o HTML.
-    *   `assets/` -> Gerado automaticamente pelo Vite (NÃO edite aqui).
-*   `docker-compose.yml` -> Configuração dos containers.
-*   `vite.config.js` -> Configuração do bundler Vite.
+## 🔒 Segurança Implementada
+*   **CSRF Protection:** Token único por sessão.
+*   **Rate Limiting:** Bloqueia múltiplos envios rápidos.
+*   **Strict Whitelisting:** Valida opções de select contra arrays permitidos.
+*   **Upload Seguro:** Validação de MIME Type real e limite de 5MB.
+*   **Sessão:** Cookies `HttpOnly` e `SameSite=Strict`.
