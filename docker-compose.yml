@@ -8,3 +8,5 @@ services:
     env_file:
       - .env
     restart: always
+    volumes:
+      - ./reports:/var/www/html/reports # Persistência dos logs
