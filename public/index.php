@@ -1,84 +1,68 @@
 <?php
+session_start();
 require_once __DIR__ . '/../vendor/autoload.php';
 
-// Load Env
+// Carregar variáveis de ambiente
 try {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
     $dotenv->load();
 } catch (Exception $e) {
-    // .env file not found, assuming variables are set in the environment
+    // Ignorar se não houver .env (produção pode usar env vars do sistema)
 }
 
-// Helper to determine asset paths
-function get_vite_assets() {
-    $isDev = ($_ENV['APP_ENV'] ?? 'production') === 'local';
-    
-    if ($isDev) {
-        return [
-            'head' => '
-                <script type="module" src="http://localhost:5173/@vite/client"></script>
-                <script type="module" src="http://localhost:5173/src/js/main.js"></script>
-            ',
-            'body' => ''
-        ];
-    }
-
-    // Production: Read Manifest
-    $manifestPath = __DIR__ . '/assets/.vite/manifest.json';
-    if (!file_exists($manifestPath)) {
-        return ['head' => '', 'body' => ''];
-    }
-
-    $manifest = json_decode(file_get_contents($manifestPath), true);
-    $entry = 'src/js/main.js'; // Must match vite.config.js input
-    
-    $head = '';
-    $body = '';
-
-    if (isset($manifest[$entry])) {
-        // JS File
-        $jsFile = $manifest[$entry]['file'];
-        $body = '<script type="module" src="assets/' . $jsFile . '"></script>';
-
-        // CSS Files
-        if (isset($manifest[$entry]['css'])) {
-            foreach ($manifest[$entry]['css'] as $css) {
-                $head .= '<link rel="stylesheet" href="assets/' . $css . '">';
-            }
-        }
-    }
-
-    return ['head' => $head, 'body' => $body];
+// Gerar Token CSRF se não existir
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-$assets = get_vite_assets();
 $message = '';
 
-// Handle Form Submission
+// Processar Formulário
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-    
-    // Prepare Body Content
-    $body = "<p><strong>E-mail do Funcionário:</strong> {$_POST['email']}</p>";
-    $body .= "<p><strong>Nome:</strong> {$_POST['nome']}</p>";
-    $body .= "<p><strong>Filial:</strong> {$_POST['filial']}</p>";
-    $body .= "<p><strong>Departamento:</strong> {$_POST['departamento']}</p>";
-    $body .= "<p><strong>Curso:</strong> {$_POST['curso']}</p>";
-    $body .= "<p><strong>Tipo:</strong> {$_POST['tipo_treinamento']}</p>";
-    $body .= "<p><strong>Duração:</strong> {$_POST['duracao']}</p>";
+    // 1. Validação CSRF
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        die('Erro de Segurança: Token CSRF inválido.');
+    }
 
-    // Mock Feature (Local Dev)
+    // 2. Sanitização de Inputs
+    $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
+    $nome = htmlspecialchars(strip_tags($_POST['nome'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $filial = htmlspecialchars(strip_tags($_POST['filial'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $departamento = htmlspecialchars(strip_tags($_POST['departamento'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $curso = htmlspecialchars(strip_tags($_POST['curso'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $tipo = htmlspecialchars(strip_tags($_POST['tipo_treinamento'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $duracao = htmlspecialchars(strip_tags($_POST['duracao'] ?? ''), ENT_QUOTES, 'UTF-8');
+    
+    // Tratamento para "Outro" tipo
+    if ($tipo === 'outro') {
+        $outro_texto = htmlspecialchars(strip_tags($_POST['outro_texto'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $tipo .= " ({$outro_texto})";
+    }
+
+    // Preparar Corpo do E-mail
+    $body = "<h2>Registro de Treinamento</h2>";
+    $body .= "<p><strong>Funcionário:</strong> {$nome}</p>";
+    $body .= "<p><strong>E-mail:</strong> {$email}</p>";
+    $body .= "<p><strong>Filial:</strong> " . ucfirst($filial) . "</p>";
+    $body .= "<p><strong>Departamento:</strong> {$departamento}</p>";
+    $body .= "<hr>";
+    $body .= "<p><strong>Curso:</strong> {$curso}</p>";
+    $body .= "<p><strong>Tipo:</strong> " . ucfirst(str_replace('_', ' ', $tipo)) . "</p>";
+    $body .= "<p><strong>Duração:</strong> {$duracao}</p>";
+    $body .= "<p><small>Enviado em: " . date('d/m/Y H:i:s') . "</small></p>";
+
+    // Mock para Ambiente Local
     $isDev = ($_ENV['APP_ENV'] ?? 'production') === 'local';
-    $mockMessage = '';
     
     if ($isDev) {
         $mockFile = __DIR__ . '/email_mock.html';
-        file_put_contents($mockFile, $body . "<hr><small>Mock gerado em: " . date('Y-m-d H:i:s') . "</small>");
-        $mockMessage = '<br><small class="text-muted">Ambiente Local: <a href="email_mock.html" target="_blank">Ver e-mail simulado (Mock)</a></small>';
+        file_put_contents($mockFile, $body);
+        $message = '<div class="alert alert-info border-0 shadow-sm">Ambiente Local: <a href="email_mock.html" target="_blank" class="fw-bold">Ver e-mail simulado</a></div>';
     }
 
+    // Envio Real via PHPMailer
+    $mail = new PHPMailer\PHPMailer\PHPMailer(true);
     try {
-        // Server settings
         $mail->CharSet    = 'UTF-8';
         $mail->isSMTP();
         $mail->Host       = $_ENV['SMTP_HOST'];
@@ -88,28 +72,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = $_ENV['SMTP_PORT'];
 
-        // Recipients
         $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Treinamentos');
-        $mail->addAddress($_ENV['SMTP_USER']); // Send to Admin (Self)
-        $mail->addReplyTo($_POST['email'], $_POST['nome']); // Allow reply to employee
+        $mail->addAddress($_ENV['SMTP_USER']); 
+        if(filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $mail->addReplyTo($email, $nome);
+        }
         
         $mail->isHTML(true);
-        $mail->Subject = $_POST['nome'] . ' - ' . ucfirst($_POST['filial']) . ' - ' . $_POST['departamento'];
+        $mail->Subject = "Treinamento: {$nome} - " . ucfirst($filial);
         $mail->Body = $body;
 
-        // Attachment
+        // Anexo
         if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] == UPLOAD_ERR_OK) {
             $mail->addAttachment($_FILES['comprovante']['tmp_name'], $_FILES['comprovante']['name']);
         }
 
         $mail->send();
-        $message = '<div class="alert alert-success">Registro enviado com sucesso!' . $mockMessage . '</div>';
+        $message .= '<div class="alert alert-success border-0 shadow-sm">✅ Registro enviado com sucesso!</div>';
+        
+        // Limpar campos após sucesso (opcional, aqui mantemos o POST para UX ou redirecionamos)
+        // header("Location: " . $_SERVER['PHP_SELF'] . "?status=success"); exit;
+
     } catch (Exception $e) {
-        if ($isDev) {
-            $message = '<div class="alert alert-warning">Erro no SMTP (Normal em Dev), mas o Mock foi gerado!' . $mockMessage . '<br>Erro Real: ' . $mail->ErrorInfo . '</div>';
-        } else {
-            $message = '<div class="alert alert-danger">Erro ao enviar: ' . $mail->ErrorInfo . '</div>';
-        }
+        $errorMsg = $isDev ? $mail->ErrorInfo : 'Contate o administrador.';
+        $message = '<div class="alert alert-danger border-0 shadow-sm">❌ Erro ao enviar: ' . $errorMsg . '</div>';
     }
 }
 ?>
@@ -120,52 +106,124 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Levantamento de Treinamentos - DigitalSat</title>
     
-    <!-- Vite Assets (Head) -->
-    <?php echo $assets['head']; ?>
+    <!-- Bootstrap 5 CSS (CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Roboto', sans-serif;
+            color: #333;
+        }
+        .main-container {
+            max-width: 800px;
+            margin: 40px auto;
+            background: #fff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            border-top: 6px solid #0056b3;
+        }
+        .logo-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo-container img {
+            max-width: 220px;
+            height: auto;
+        }
+        .form-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-header h2 {
+            font-weight: 700;
+            color: #0056b3;
+            font-size: 1.6rem;
+        }
+        .intro-text {
+            background-color: #eef2f7;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            color: #495057;
+            margin-bottom: 30px;
+            border-left: 4px solid #0056b3;
+        }
+        .form-label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #555;
+        }
+        .btn-submit {
+            background-color: #0056b3;
+            color: white;
+            padding: 14px 30px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            border: none;
+            width: 100%;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .btn-submit:hover {
+            background-color: #004494;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,86,179,0.2);
+        }
+        /* Ajuste para validação do Bootstrap */
+        .was-validated .form-control:invalid {
+            border-color: #dc3545;
+            padding-right: calc(1.5em + .75rem);
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5zM6 8.2a.75.75 0 110-1.5.75.75 0 010 1.5z'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right calc(.375em + .1875rem) center;
+            background-size: calc(.75em + .375rem) calc(.75em + .375rem);
+        }
+    </style>
 </head>
 <body>
 
-<div class="container">
+<div class="container pb-5">
     <div class="main-container">
         <?php echo $message; ?>
 
-        <!-- Logo -->
         <div class="logo-container">
+            <!-- Placeholder para Logo, substitua a URL se necessário -->
             <img src="https://loja.digitalsat.com.br/imagem/logo-store?v=68468041b7f0a7698a97772f2c9fda4d" alt="DigitalSat Logo">
         </div>
 
-        <!-- Header -->
         <div class="form-header">
-            <h2>Ferramenta interna de cadastro de treinamentos</h2>
-            <h4>Levantamento de Treinamentos - 2026</h4>
+            <h2>Cadastro de Treinamentos Internos</h2>
+            <p class="text-muted">Ciclo 2026</p>
         </div>
 
-        <!-- Intro Text -->
         <div class="intro-text">
-            Prezado(a) funcionário(a), por favor, utilize este formulário para registrar todos os treinamentos e cursos realizados ao longo do ano de 2026.
+            Prezado(a) colaborador(a), utilize este formulário para registrar oficialmente seus treinamentos realizados.
         </div>
 
-        <!-- Form -->
         <form action="" method="POST" enctype="multipart/form-data" class="needs-validation" novalidate>
-            
-            <div class="mb-3">
-                <label for="email" class="form-label">E-mail:</label>
-                <input type="email" class="form-control" id="email" name="email" required placeholder="exemplo@exemplo.com.br">
-            </div>
+            <!-- Token CSRF -->
+            <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
 
-            <div class="mb-3">
-                <label for="nome" class="form-label">Nome do Funcionário(a):</label>
-                <input type="text" class="form-control" id="nome" name="nome" required placeholder="Nome completo">
-            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="email" class="form-label">Seu E-mail Corporativo</label>
+                    <input type="email" class="form-control" id="email" name="email" required placeholder="nome@digitalsat.com.br">
+                </div>
+                <div class="col-md-6">
+                    <label for="nome" class="form-label">Nome Completo</label>
+                    <input type="text" class="form-control" id="nome" name="nome" required>
+                </div>
 
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="filial" class="form-label">Filial:</label>
+                <div class="col-md-6">
+                    <label for="filial" class="form-label">Filial</label>
                     <select class="form-select" id="filial" name="filial" required>
-                        <option value="" selected disabled>Selecione a filial...</option>
-                        <option value="aptec">APTEC</option>
+                        <option value="" selected disabled>Selecione...</option>
                         <option value="matriz">Matriz</option>
+                        <option value="aptec">APTEC</option>
                         <option value="blumenau">Blumenau</option>
                         <option value="itapema">Itapema</option>
                         <option value="balneario_camboriu">Balneário Camboriú</option>
@@ -179,68 +237,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <option value="tubarao">Tubarão</option>
                     </select>
                 </div>
-                <div class="col-md-6 mb-3">
-                    <label for="departamento" class="form-label">Departamento:</label>
-                    <input type="text" class="form-control" id="departamento" name="departamento" required placeholder="Ex: TI, Vendas, RH">
+                <div class="col-md-6">
+                    <label for="departamento" class="form-label">Departamento</label>
+                    <input type="text" class="form-control" id="departamento" name="departamento" required placeholder="Ex: Comercial, TI...">
                 </div>
             </div>
 
-            <hr class="my-4">
+            <hr class="my-4 text-muted">
 
-            <h5 class="mb-3 text-muted">Detalhes do Curso</h5>
+            <h5 class="mb-3 text-primary">Dados do Treinamento</h5>
 
             <div class="mb-3">
-                <label for="curso" class="form-label">Nome do Curso:</label>
-                <input type="text" class="form-control" id="curso" name="curso" required placeholder="Título do curso realizado">
+                <label for="curso" class="form-label">Nome do Curso / Treinamento</label>
+                <input type="text" class="form-control" id="curso" name="curso" required>
             </div>
 
             <div class="mb-3">
-                <label class="form-label d-block">Tipo de Treinamento:</label>
+                <label class="form-label d-block">Modalidade</label>
                 <div class="form-check form-check-inline">
                     <input class="form-check-input" type="radio" name="tipo_treinamento" id="presencial" value="presencial" required>
                     <label class="form-check-label" for="presencial">Presencial</label>
                 </div>
                 <div class="form-check form-check-inline">
                     <input class="form-check-input" type="radio" name="tipo_treinamento" id="online_vivo" value="online_vivo">
-                    <label class="form-check-label" for="online_vivo">Online (ao vivo)</label>
+                    <label class="form-check-label" for="online_vivo">Online (Ao Vivo)</label>
                 </div>
                 <div class="form-check form-check-inline">
                     <input class="form-check-input" type="radio" name="tipo_treinamento" id="online_gravado" value="online_gravado">
-                    <label class="form-check-label" for="online_gravado">Online (gravado)</label>
+                    <label class="form-check-label" for="online_gravado">Online (Gravado)</label>
                 </div>
                 <div class="form-check form-check-inline">
                     <input class="form-check-input" type="radio" name="tipo_treinamento" id="outro" value="outro">
                     <label class="form-check-label" for="outro">Outro</label>
                 </div>
-                <input type="text" class="form-control mt-2" id="outro_texto" name="outro_texto" placeholder="Se outro, especifique" style="display:none;">
+                <input type="text" class="form-control mt-2" id="outro_texto" name="outro_texto" placeholder="Especifique qual..." style="display:none;">
             </div>
 
             <div class="mb-3">
-                <label for="duracao" class="form-label">Duração do Curso:</label>
-                <input type="text" class="form-control" id="duracao" name="duracao" required placeholder="Ex: 4 horas e 30 minutos">
+                <label for="duracao" class="form-label">Carga Horária</label>
+                <input type="text" class="form-control" id="duracao" name="duracao" required placeholder="Ex: 4h">
             </div>
 
             <div class="mb-4">
-                <label for="comprovante" class="form-label">Anexar Comprovante</label>
+                <label for="comprovante" class="form-label">Certificado ou Comprovante (Opcional)</label>
                 <input class="form-control" type="file" id="comprovante" name="comprovante" accept=".pdf,.jpg,.png,.jpeg">
-                <div class="form-text">Formatos aceitos: PDF, JPG, PNG.</div>
+                <div class="form-text">Aceita PDF ou Imagens (Max 5MB recomendado).</div>
             </div>
 
-            <button type="submit" class="btn btn-primary btn-submit">Enviar Registro</button>
-
+            <button type="submit" class="btn btn-submit">
+                Enviar Registro
+            </button>
         </form>
+    </div>
+    
+    <div class="text-center text-muted small">
+        &copy; 2026 DigitalSat
     </div>
 </div>
 
-<footer class="text-center mt-5 mb-5 text-muted" style="font-size: 0.8rem;">
-    &copy; 2026 DigitalSat - Todos os direitos reservados.
-</footer>
+<!-- Bootstrap JS Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-<!-- Vite Assets (Body) -->
-<?php echo $assets['body']; ?>
-
-<!-- Script for 'Outro' logic -->
 <script>
+    // Lógica para campo 'Outro'
     const radioButtons = document.querySelectorAll('input[name="tipo_treinamento"]');
     const outroInput = document.getElementById('outro_texto');
 
@@ -249,6 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (this.value === 'outro') {
                 outroInput.style.display = 'block';
                 outroInput.required = true;
+                outroInput.focus();
             } else {
                 outroInput.style.display = 'none';
                 outroInput.required = false;
@@ -256,6 +316,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
     });
+
+    // Validação Bootstrap
+    (() => {
+        'use strict'
+        const forms = document.querySelectorAll('.needs-validation')
+        Array.from(forms).forEach(form => {
+            form.addEventListener('submit', event => {
+                if (!form.checkValidity()) {
+                    event.preventDefault()
+                    event.stopPropagation()
+                }
+                form.classList.add('was-validated')
+            }, false)
+        })
+    })()
 </script>
 
 </body>
