@@ -137,6 +137,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new Exception("Aguarde alguns segundos antes de enviar novamente.");
         }
 
+        // Sanitização e Validação (Restaurado)
+        $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
+        $nome = trim(htmlspecialchars(strip_tags($_POST['nome'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        $filial = $_POST['filial'] ?? '';
+        $departamento = trim(htmlspecialchars(strip_tags($_POST['departamento'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        $curso = trim(htmlspecialchars(strip_tags($_POST['curso'] ?? ''), ENT_QUOTES, 'UTF-8'));
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new Exception("E-mail inválido.");
+        if (!in_array($filial, $filiais_permitidas)) throw new Exception("Filial inválida.");
+
         $tipo = $_POST['tipo_treinamento'] ?? '';
         if (!in_array($tipo, $tipos_permitidos)) {
             throw new Exception("Tipo de treinamento inválido.");
