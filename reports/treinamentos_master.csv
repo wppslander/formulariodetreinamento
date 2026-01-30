@@ -1,0 +1,4 @@
+Data/Hora,Nome,Email,Filial,Departamento,Curso,Tipo,Duracao,IP
+"2026-01-30 12:17:30",Testeiro,teste@teste.ip,matriz,Testador,TEste,presencial,4h,172.26.0.1
+"2026-01-30 13:31:20","Testando da Silva",teste@teste.com.br,aptec,TEstes,"TEstedores anonimos",presencial,150,172.26.0.1
+"2026-01-30 13:39:02",Fulano,e-commerce@digitalsat.com.br,matriz,e-commerce,opateste,online_vivo,745285292462,10.1.50.108
