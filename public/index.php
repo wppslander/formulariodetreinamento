@@ -4,9 +4,9 @@ $cookieParams = [
     'lifetime' => 0, // Até fechar o navegador
     'path' => '/',
     'domain' => '',
-    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on', // Apenas HTTPS se disponível
-    'httponly' => true, // Impede acesso via JS (Mitiga XSS)
-    'samesite' => 'Strict' // Mitiga CSRF
+    'secure' => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
+    'httponly' => true,
+    'samesite' => 'Strict'
 ];
 session_set_cookie_params($cookieParams);
 session_start();
@@ -17,17 +17,14 @@ require_once __DIR__ . '/../vendor/autoload.php';
 try {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
     $dotenv->load();
-} catch (Exception $e) {
-    // Ignorar se não houver .env
-}
+} catch (Exception $e) {}
 
-// Configurações e Listas Permitidas (Whitelisting)
+// Configurações
 $filiais_permitidas = [
     'matriz', 'aptec', 'blumenau', 'itapema', 'balneario_camboriu', 
     'itajai', 'brusque', 'joinville', 'rio_do_sul', 'gravatai', 
     'lages', 'sao_jose', 'tubarao'
 ];
-
 $tipos_permitidos = ['presencial', 'online_vivo', 'online_gravado', 'outro'];
 
 // Gerar Token CSRF
@@ -35,106 +32,79 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-$message = '';
+// Função para Registrar Log Master (CSV)
+function registrar_log_master($dados) {
+    $diretorio = __DIR__ . '/../reports';
+    $arquivo = $diretorio . '/treinamentos_master.csv';
 
-// Processar Formulário
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        // 1. Validação CSRF
-        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-            throw new Exception("Erro de Segurança: Sessão expirada ou inválida. Recarregue a página.");
+    // Cria diretório se não existir
+    if (!is_dir($diretorio)) {
+        mkdir($diretorio, 0755, true);
+    }
+
+    $novoArquivo = !file_exists($arquivo);
+    $handle = fopen($arquivo, 'a');
+    
+    if ($handle) {
+        // Trava o arquivo para evitar corrupção em acessos simultâneos
+        flock($handle, LOCK_EX);
+
+        // Cabeçalho se for arquivo novo
+        if ($novoArquivo) {
+            fputcsv($handle, ['Data/Hora', 'Nome', 'Email', 'Filial', 'Departamento', 'Curso', 'Tipo', 'Duracao', 'IP']);
         }
 
-        // 2. Rate Limiting (Anti-Spam) - 30 segundos
-        if (isset($_SESSION['last_submit']) && (time() - $_SESSION['last_submit'] < 30)) {
+        // Dados da linha
+        fputcsv($handle, [
+            date('Y-m-d H:i:s'),
+            $dados['nome'],
+            $dados['email'],
+            $dados['filial'],
+            $dados['departamento'],
+            $dados['curso'],
+            $dados['tipo'],
+            $dados['duracao'],
+            $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'
+        ]);
+
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+}
+
+$message = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+            throw new Exception("Sessão expirada. Recarregue a página.");
+        }
+
+        if (isset($_SESSION['last_submit']) && (time() - $_SESSION['last_submit'] < 10)) {
             throw new Exception("Aguarde alguns segundos antes de enviar novamente.");
         }
 
-        // 3. Validação de Inputs (Whitelisting & Sanitização)
+        // Sanitização e Validação
         $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            throw new Exception("E-mail inválido.");
-        }
-
         $nome = trim(htmlspecialchars(strip_tags($_POST['nome'] ?? ''), ENT_QUOTES, 'UTF-8'));
-        if (strlen($nome) < 3) throw new Exception("Nome muito curto.");
-
         $filial = $_POST['filial'] ?? '';
-        if (!in_array($filial, $filiais_permitidas)) {
-            throw new Exception("Filial selecionada inválida.");
-        }
-
         $departamento = trim(htmlspecialchars(strip_tags($_POST['departamento'] ?? ''), ENT_QUOTES, 'UTF-8'));
         $curso = trim(htmlspecialchars(strip_tags($_POST['curso'] ?? ''), ENT_QUOTES, 'UTF-8'));
-        
         $tipo = $_POST['tipo_treinamento'] ?? '';
-        if (!in_array($tipo, $tipos_permitidos)) {
-            throw new Exception("Tipo de treinamento inválido.");
-        }
-
         $duracao = trim(htmlspecialchars(strip_tags($_POST['duracao'] ?? ''), ENT_QUOTES, 'UTF-8'));
 
-        // Tratamento para "Outro"
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new Exception("E-mail inválido.");
+        if (!in_array($filial, $filiais_permitidas)) throw new Exception("Filial inválida.");
+        if (!in_array($tipo, $tipos_permitidos)) throw new Exception("Tipo inválido.");
+
         if ($tipo === 'outro') {
             $outro_texto = trim(htmlspecialchars(strip_tags($_POST['outro_texto'] ?? ''), ENT_QUOTES, 'UTF-8'));
-            if (empty($outro_texto)) throw new Exception("Especifique o tipo de treinamento.");
-            $tipo .= " ({$outro_texto})";
+            $tipo = "Outro: " . $outro_texto;
         }
 
-        // 4. Validação e Segurança de Arquivo
-        $anexoPath = null;
-        $anexoNome = null;
-
-        if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] !== UPLOAD_ERR_NO_FILE) {
-            $arquivo = $_FILES['comprovante'];
-
-            // Erro de Upload
-            if ($arquivo['error'] !== UPLOAD_ERR_OK) {
-                throw new Exception("Erro no upload do arquivo.");
-            }
-
-            // Validar Tamanho (Max 5MB)
-            if ($arquivo['size'] > 5 * 1024 * 1024) {
-                throw new Exception("O arquivo excede o limite de 5MB.");
-            }
-
-            // Validar Tipo Real (MIME Type)
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $mimeReal = $finfo->file($arquivo['tmp_name']);
-            $mimesPermitidos = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-
-            if (!in_array($mimeReal, $mimesPermitidos)) {
-                throw new Exception("Formato de arquivo não permitido. Apenas PDF, JPG ou PNG.");
-            }
-
-            $anexoPath = $arquivo['tmp_name'];
-            $anexoNome = $arquivo['name'];
-        }
-
-        // --- Envio do E-mail ---
-        
-        $body = "<h2>Registro de Treinamento</h2>";
-        $body .= "<p><strong>Funcionário:</strong> {$nome}</p>";
-        $body .= "<p><strong>E-mail:</strong> {$email}</p>";
-        $body .= "<p><strong>Filial:</strong> " . ucfirst($filial) . "</p>";
-        $body .= "<p><strong>Departamento:</strong> {$departamento}</p>";
-        $body .= "<hr>";
-        $body .= "<p><strong>Curso:</strong> {$curso}</p>";
-        $body .= "<p><strong>Tipo:</strong> " . ucfirst(str_replace('_', ' ', $tipo)) . "</p>";
-        $body .= "<p><strong>Duração:</strong> {$duracao}</p>";
-        $body .= "<p><small>Enviado em: " . date('d/m/Y H:i:s') . "</small></p>";
-
-        // Mock Local
-        $isDev = ($_ENV['APP_ENV'] ?? 'production') === 'local';
-        if ($isDev) {
-            $mockFile = __DIR__ . '/email_mock.html';
-            file_put_contents($mockFile, $body);
-            $message = '<div class="alert alert-info border-0 shadow-sm">Ambiente Local: <a href="email_mock.html" target="_blank" class="fw-bold">Ver e-mail simulado</a></div>';
-        }
-
-        // PHPMailer
+        // --- Envio E-mail ---
         $mail = new PHPMailer\PHPMailer\PHPMailer(true);
-        $mail->CharSet    = 'UTF-8';
+        $mail->CharSet = 'UTF-8';
         $mail->isSMTP();
         $mail->Host       = $_ENV['SMTP_HOST'];
         $mail->SMTPAuth   = true;
@@ -144,32 +114,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mail->Port       = $_ENV['SMTP_PORT'];
 
         $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Treinamentos');
-        $mail->addAddress($_ENV['SMTP_USER']); 
-        if(filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $mail->addReplyTo($email, $nome);
-        }
+        $mail->addAddress($_ENV['SMTP_USER']);
+        $mail->addReplyTo($email, $nome);
         
         $mail->isHTML(true);
         $mail->Subject = "Treinamento: {$nome} - " . ucfirst($filial);
-        $mail->Body = $body;
+        $mail->Body = "<h3>Registro de Treinamento</h3><p><strong>Nome:</strong> {$nome}</p><p><strong>Curso:</strong> {$curso}</p>";
 
-        if ($anexoPath) {
-            $mail->addAttachment($anexoPath, $anexoNome);
+        if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] == UPLOAD_ERR_OK) {
+            $mail->addAttachment($_FILES['comprovante']['tmp_name'], $_FILES['comprovante']['name']);
         }
 
         $mail->send();
+
+        // --- LOG MASTER CSV ---
+        registrar_log_master([
+            'nome' => $nome,
+            'email' => $email,
+            'filial' => $filial,
+            'departamento' => $departamento,
+            'curso' => $curso,
+            'tipo' => $tipo,
+            'duracao' => $duracao
+        ]);
         
-        // Sucesso: Atualizar timestamp de envio
         $_SESSION['last_submit'] = time();
-        $message .= '<div class="alert alert-success border-0 shadow-sm">✅ Registro enviado com sucesso!</div>';
+        $message = '<div class="alert alert-success border-0 shadow-sm">✅ Registro enviado e arquivado com sucesso!</div>';
 
     } catch (Exception $e) {
-        $msgErro = $e->getMessage();
-        if ($e instanceof PHPMailer\PHPMailer\Exception) {
-             // Esconder erro técnico do PHPMailer em produção, mas mostrar em dev
-             $msgErro = $isDev ? $mail->ErrorInfo : "Erro ao conectar com servidor de e-mail.";
-        }
-        $message = '<div class="alert alert-danger border-0 shadow-sm">❌ ' . $msgErro . '</div>';
+        $message = '<div class="alert alert-danger border-0 shadow-sm">❌ ' . $e->getMessage() . '</div>';
     }
 }
 ?>
@@ -179,11 +152,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Levantamento de Treinamentos - DigitalSat</title>
-    
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-
     <style>
         body { background-color: #f4f6f9; font-family: 'Roboto', sans-serif; color: #333; }
         .main-container { max-width: 800px; margin: 40px auto; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border-top: 6px solid #0056b3; }
