@@ -27,6 +27,7 @@
             border-radius: 12px;
             font-family: Arial, sans-serif;
             background: #fff; /* Garantindo fundo branco se o body for cinza */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); /* Sombra suave */
         }
         /* Estilização da linha divisória */
         .job-form hr {
@@ -101,10 +102,14 @@
             resize: vertical;
         }
         h1 {
-            color: #DC0C15; /* Letras maiores */
+            background-color: #DC0C15; /* Fundo vermelho */
+            color: #f8f9fa; /* Texto cinza claro/branco */
             /*text-align: center;  centraliza o h1 */
-            font-size:32px;
+            font-size: 32px;
             text-align: center;
+            padding: 20px;
+            margin: -30px -30px 30px -30px; /* Margem negativa para encostar nas bordas */
+            border-radius: 12px 12px 0 0; /* Arredondar apenas topo */
         }
         /* Centraliza h2 e dá espaçamento */
         h2 {
