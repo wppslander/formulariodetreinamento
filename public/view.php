@@ -135,6 +135,22 @@
             border: 1px solid #ced4da;
             border-left: none;
         }
+        .form-header-bg {
+            background-color: #E6E6E6;
+            margin: -30px -30px 30px -30px; /* Margens negativas para encostar nas bordas laterais */
+            padding: 20px 30px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        /* Ajuste do H2 para dentro do novo fundo */
+        .form-header-bg h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        /* Ajuste da intro-text para dentro do novo fundo */
+        .form-header-bg .intro-text {
+            margin-bottom: 0;
+            font-size: 0.95rem;
+        }
     </style>
 </head>
 <body>
@@ -145,16 +161,16 @@
         <!-- Área de Mensagens (Sucesso/Erro vindos do Controller) -->
         <?php echo $message; ?>
 
-        <div class="form-header">
-            <h1>
-                <img src="https://loja.digitalsat.com.br/imagem/logo-store/index/2?v=68468041b7f0a7698a97772f2c9fda4d" alt="DigitalSat Logo">
-                Cadastro de Treinamentos Internos
-            </h1>
-            <h2 style="font-size: 1.2rem; margin-top: 0; color: #555555;">Ciclo 2026</h2>
-        </div>
+        <h1>
+            <img src="https://loja.digitalsat.com.br/imagem/logo-store/index/2?v=68468041b7f0a7698a97772f2c9fda4d" alt="DigitalSat Logo">
+            Cadastro de Treinamentos Internos
+        </h1>
 
-        <div class="intro-text mb-4 text-center">
-            Prezado(a) colaborador(a), utilize este formulário para registrar oficialmente seus treinamentos realizados.
+        <div class="form-header-bg text-center">
+            <h2 style="font-size: 1.2rem; color: #555555;">Ciclo 2026</h2>
+            <div class="intro-text">
+                Prezado(a) colaborador(a), utilize este formulário para registrar oficialmente seus treinamentos realizados.
+            </div>
         </div>
 
         <!-- Início do Formulário -->
