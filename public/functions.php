@@ -85,7 +85,7 @@ function enviar_relatorio_rh($reportsDir) {
         $mail->Port       = $_ENV['SMTP_PORT'];
 
         $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Sistema');
-        $mail->addAddress('rh@digitalsat.com.br');
+        $mail->addAddress($_ENV['REPORT_EMAIL'] ?? 'rh@digitalsat.com.br');
         
         $mail->isHTML(true);
         $mail->Subject = "[AUDITORIA] Relatório Geral de Treinamentos - " . date('d/m/Y');

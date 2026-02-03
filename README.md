@@ -46,14 +46,24 @@ O sistema mantém um registro permanente (CSV) de todos os envios para fins de a
 *   **Dados Coletados:** Data/Hora, Dados do Funcionário, Curso, Duração e **IP de Origem** (com suporte a Proxy/X-Forwarded-For).
 
 ### Envio de Relatório para o RH
-Para enviar o CSV acumulado para o e-mail do RH (`rh@digitalsat.com.br`), acesse a seguinte URL no navegador (ou configure um Cron Job):
+Para enviar o CSV acumulado para o e-mail do RH (configurado em `REPORT_EMAIL`), acesse a seguinte URL no navegador:
 
 ```
-http://seu-servidor:8080/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
+http://seu-servidor:8081/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
 ```
 
 *   O token deve ser o mesmo configurado em `ADMIN_TOKEN` no arquivo `.env`.
 *   Se o token for inválido, o acesso será negado.
+
+#### ⏰ Automação (Cron Job)
+Para que o relatório seja enviado automaticamente (ex: todo dia 23 do mês), configure um **Cron Job** no painel da sua hospedagem (cPanel/Tarefa Agendada) para executar o seguinte comando:
+
+```bash
+# Exemplo usando CURL (Chamada via URL)
+curl -s "http://seu-servidor:8081/?action=enviar_relatorio&token=SEU_TOKEN_AQUI" > /dev/null 2>&1
+```
+
+Configure a frequência para: `0 9 23 * *` (Todo dia 23 às 09:00h).
 
 ---
 
