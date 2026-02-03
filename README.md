@@ -34,7 +34,7 @@ Na raiz do projeto:
 ```bash
 docker compose up -d --build
 ```
-Acesse: **http://localhost:8080**
+Acesse: **http://localhost**
 
 ---
 
@@ -49,7 +49,7 @@ O sistema mantém um registro permanente (CSV) de todos os envios para fins de a
 Para enviar o CSV acumulado para o e-mail do RH (configurado em `REPORT_EMAIL`), acesse a seguinte URL no navegador:
 
 ```
-http://seu-servidor:8081/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
+http://seu-servidor/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
 ```
 
 *   O token deve ser o mesmo configurado em `ADMIN_TOKEN` no arquivo `.env`.
@@ -60,7 +60,7 @@ Para que o relatório seja enviado automaticamente (ex: todo dia 23 do mês), co
 
 ```bash
 # Exemplo usando CURL (Chamada via URL)
-curl -s "http://seu-servidor:8081/?action=enviar_relatorio&token=SEU_TOKEN_AQUI" > /dev/null 2>&1
+curl -s "http://seu-servidor/?action=enviar_relatorio&token=SEU_TOKEN_AQUI" > /dev/null 2>&1
 ```
 
 Configure a frequência para: `0 9 23 * *` (Todo dia 23 às 09:00h).
