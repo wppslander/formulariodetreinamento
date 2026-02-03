@@ -85,8 +85,8 @@ function enviar_relatorio_rh($reportsDir) {
         $mail->Port       = $_ENV['SMTP_PORT'];
 
         $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Sistema');
-        // Usa o REPORT_EMAIL se definido, caso contrário envia para o próprio SMTP_USER (centralizado)
-        $destinatario = $_ENV['REPORT_EMAIL'] ?? $_ENV['SMTP_USER'];
+        // O relatório vai para o destino específico definido no .env
+        $destinatario = $_ENV['REPORT_DESTINATION'] ?? 'rh@digitalsat.com.br';
         $mail->addAddress($destinatario);
         
         $mail->isHTML(true);
