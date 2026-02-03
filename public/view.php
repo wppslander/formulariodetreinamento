@@ -102,7 +102,7 @@
             resize: vertical;
         }
         h1 {
-            background-color: #DC0C15; /* Fundo vermelho */
+            background-color: #252224; /* Fundo escuro solicitado */
             color: #f8f9fa; /* Texto cinza claro/branco */
             font-size: 36px;
             text-align: center;
