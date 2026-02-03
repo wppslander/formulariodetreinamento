@@ -38,7 +38,7 @@
             display: block;
             font-weight: bold;
             margin-bottom: 8px;
-            color: #333;
+            color: #555555; /* Letras médias */
         }
         /* Estilização dos inputs e selects */
         .job-form input[type="text"],
@@ -54,6 +54,7 @@
             border: 1px solid #ced4da;
             border-radius: 8px;
             background-color: #fff;
+            color: #333333; /* Texto */
             transition: border-color 0.3s ease;
         }
         /* Estilização do select com ícone de seta */
@@ -68,7 +69,7 @@
         .job-form input[type="submit"] {
             width: 100%;
             padding: 12px;
-            background-color: #dc0c15;
+            background-color: #DC0C15; /* Letras maiores / Botão */
             color: white;
             border: none;
             border-radius: 8px;
@@ -76,10 +77,14 @@
             font-weight: bold;
             transition: background-color 0.3s ease;
         }
+        /* Hover do botão */
+        .job-form input[type="submit"]:hover {
+            background-color: #b50a11;
+        }
         /* Estilização do texto de aceite */
         .job-form .terms-text {
             font-size: 14px;
-            color: #555;
+            color: #333333; /* Texto */
         }
         /* Estilização dos links */
         .job-form .terms-text a {
@@ -96,7 +101,7 @@
             resize: vertical;
         }
         h1 {
-            color: #dc0c15;
+            color: #DC0C15; /* Letras maiores */
             /*text-align: center;  centraliza o h1 */
             font-size:32px;
             text-align: center;
@@ -105,13 +110,20 @@
         h2 {
             text-align: center;
             margin-top: 10px;
-            color: #555; 
+            color: #555555; /* Letras médias */
             font-size:28px
         }
         
         /* Ajustes extras para layout responsivo com Bootstrap */
-        body { background-color: #f4f6f9; }
+        body { background-color: #f4f6f9; color: #333333; }
         .logo-container { text-align: center; margin-bottom: 20px; }
+        .intro-text { color: #333333; }
+        .input-group-text {
+            background-color: #fff;
+            color: #555555;
+            border: 1px solid #ced4da;
+            border-left: none;
+        }
     </style>
 </head>
 <body>
@@ -129,10 +141,10 @@
 
         <div class="form-header">
             <h1>Cadastro de Treinamentos Internos</h1>
-            <h2 style="font-size: 1.2rem; margin-top: 0;">Ciclo 2026</h2>
+            <h2 style="font-size: 1.2rem; margin-top: 0; color: #555555;">Ciclo 2026</h2>
         </div>
 
-        <div class="intro-text mb-4 text-center text-muted">
+        <div class="intro-text mb-4 text-center">
             Prezado(a) colaborador(a), utilize este formulário para registrar oficialmente seus treinamentos realizados.
         </div>
 
@@ -233,7 +245,7 @@
         </form>
     </div>
     
-    <div class="text-center text-muted small mt-3">
+    <div class="text-center small mt-3" style="color: #333333;">
         &copy; 2026 DigitalSat
     </div>
 </div>
@@ -273,10 +285,10 @@
                     event.preventDefault()
                     event.stopPropagation()
                 } else {
-                    // Se estiver válido: Bloqueia o botão e mostra Spinner
-                    const btn = form.querySelector('button[type="submit"]');
+                    // Se estiver válido: Bloqueia o botão e mostra status
+                    const btn = form.querySelector('input[type="submit"]');
                     btn.disabled = true;
-                    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Enviando...';
+                    btn.value = 'Enviando...';
                 }
                 form.classList.add('was-validated')
             }, false)
