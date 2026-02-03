@@ -104,9 +104,9 @@
         h1 {
             background-color: #DC0C15; /* Fundo vermelho */
             color: #f8f9fa; /* Texto cinza claro/branco */
-            font-size: 28px;
+            font-size: 36px;
             text-align: center;
-            padding: 20px;
+            padding: 25px;
             margin: -30px -30px 30px -30px; /* Margem negativa para encostar nas bordas */
             border-radius: 12px 12px 0 0; /* Arredondar apenas topo */
             display: flex;
@@ -115,7 +115,7 @@
             gap: 20px;
         }
         h1 img {
-            max-height: 40px;
+            max-height: 45px;
             width: auto;
         }
         /* Centraliza h2 e dá espaçamento */
