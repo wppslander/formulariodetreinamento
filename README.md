@@ -34,7 +34,7 @@ Na raiz do projeto:
 ```bash
 docker compose up -d --build
 ```
-Acesse: **http://localhost**
+Acesse: **http://localhost:{porta_designada}**
 
 ---
 
@@ -46,12 +46,13 @@ O sistema mantém um registro permanente (CSV) de todos os envios para fins de a
 *   **Dados Coletados:** Data/Hora, Dados do Funcionário, Curso, Duração e **IP de Origem** (com suporte a Proxy/X-Forwarded-For).
 
 ### Envio de Relatório para o RH
-Para enviar o CSV acumulado para o e-mail do RH (configurado em `REPORT_EMAIL`), acesse a seguinte URL no navegador:
+Para enviar o CSV acumulado para o e-mail cadastrado no sistema (SMTP), acesse a seguinte URL no navegador:
 
 ```
 http://seu-servidor/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
 ```
 
+*   O relatório é enviado por padrão para o e-mail configurado em `SMTP_USER`.
 *   O token deve ser o mesmo configurado em `ADMIN_TOKEN` no arquivo `.env`.
 *   Se o token for inválido, o acesso será negado.
 

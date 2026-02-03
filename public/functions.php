@@ -85,7 +85,9 @@ function enviar_relatorio_rh($reportsDir) {
         $mail->Port       = $_ENV['SMTP_PORT'];
 
         $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Sistema');
-        $mail->addAddress($_ENV['REPORT_EMAIL'] ?? 'rh@digitalsat.com.br');
+        // Usa o REPORT_EMAIL se definido, caso contrário envia para o próprio SMTP_USER (centralizado)
+        $destinatario = $_ENV['REPORT_EMAIL'] ?? $_ENV['SMTP_USER'];
+        $mail->addAddress($destinatario);
         
         $mail->isHTML(true);
         $mail->Subject = "[AUDITORIA] Relatório Geral de Treinamentos - " . date('d/m/Y');
@@ -95,7 +97,7 @@ function enviar_relatorio_rh($reportsDir) {
         $mail->addAttachment($arquivo, 'relatorio_treinamentos_' . date('Ymd') . '.csv');
         
         $mail->send();
-        echo "✅ Relatório enviado com sucesso para rh@digitalsat.com.br!";
+        echo "✅ Relatório enviado com sucesso para {$destinatario}!";
     } catch (Exception $e) {
         echo "❌ Erro ao enviar relatório: {$mail->ErrorInfo}";
     }
