@@ -104,12 +104,19 @@
         h1 {
             background-color: #DC0C15; /* Fundo vermelho */
             color: #f8f9fa; /* Texto cinza claro/branco */
-            /*text-align: center;  centraliza o h1 */
-            font-size: 32px;
+            font-size: 28px;
             text-align: center;
             padding: 20px;
             margin: -30px -30px 30px -30px; /* Margem negativa para encostar nas bordas */
             border-radius: 12px 12px 0 0; /* Arredondar apenas topo */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+        h1 img {
+            max-height: 40px;
+            width: auto;
         }
         /* Centraliza h2 e dá espaçamento */
         h2 {
@@ -121,7 +128,6 @@
         
         /* Ajustes extras para layout responsivo com Bootstrap */
         body { background-color: #f4f6f9; color: #333333; }
-        .logo-container { text-align: center; margin-bottom: 20px; }
         .intro-text { color: #333333; }
         .input-group-text {
             background-color: #fff;
@@ -139,13 +145,11 @@
         <!-- Área de Mensagens (Sucesso/Erro vindos do Controller) -->
         <?php echo $message; ?>
 
-        <!-- Cabeçalho Visual -->
-        <div class="logo-container">
-            <img src="https://loja.digitalsat.com.br/imagem/logo-store?v=68468041b7f0a7698a97772f2c9fda4d" alt="DigitalSat Logo" style="max-height: 50px;">
-        </div>
-
         <div class="form-header">
-            <h1>Cadastro de Treinamentos Internos</h1>
+            <h1>
+                <img src="https://loja.digitalsat.com.br/imagem/logo-store/index/2?v=68468041b7f0a7698a97772f2c9fda4d" alt="DigitalSat Logo">
+                Cadastro de Treinamentos Internos
+            </h1>
             <h2 style="font-size: 1.2rem; margin-top: 0; color: #555555;">Ciclo 2026</h2>
         </div>
 
