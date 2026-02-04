@@ -134,6 +134,13 @@
             color: #555555;
             border: 1px solid #ced4da;
             border-left: none;
+            /* Fix: Arredondamento correto na direita (8px) para combinar com o input */
+            border-radius: 0 8px 8px 0;
+        }
+        /* Fix: Remove arredondamento da direita do input quando dentro de um grupo */
+        .job-form .input-group input {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
         }
         .form-header-bg {
             background-color: #E6E6E6;
@@ -169,7 +176,7 @@
         <div class="form-header-bg text-center">
             <h2 style="font-size: 1.2rem; color: #555555;">Ciclo 2026</h2>
             <div class="intro-text">
-                Prezado(a) colaborador(a), utilize este formulário para registrar oficialmente seus treinamentos realizados.
+                Prezado(a) funcionário(a), utilize este formulário para registrar oficialmente seus treinamentos realizados.
             </div>
         </div>
 
@@ -180,7 +187,7 @@
             <!-- Segurança: Token CSRF (Garante que o post vem deste site) -->
             <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
 
-            <!-- Seção 1: Dados do Colaborador -->
+            <!-- Seção 1: Dados do Funcionário -->
             <div class="row g-3">
                 <div class="col-md-6">
                     <label for="email">E-mail</label>
