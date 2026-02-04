@@ -196,8 +196,8 @@
                     <select id="filial" name="filial" required>
                         <option value="" selected disabled>Selecione...</option>
                         <!-- Loop PHP para gerar opções baseadas na configuração -->
-                        <?php foreach($filiais_permitidas as $f): ?>
-                            <option value="<?php echo $f; ?>"><?php echo ucfirst(str_replace('_', ' ', $f)); ?></option>
+                        <?php foreach($filiais_permitidas as $slug => $nome_exibicao): ?>
+                            <option value="<?php echo $slug; ?>"><?php echo $nome_exibicao; ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

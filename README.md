@@ -68,22 +68,35 @@ Configure a frequência para: `0 9 23 * *` (Todo dia 23 às 09:00h).
 
 ---
 
-## 🛠️ Desenvolvimento e Manutenção
+## 🛠️ Personalização e Configuração
 
-Toda a lógica e visual estão centralizados em um único arquivo para facilitar a manutenção.
+A estrutura do projeto está organizada em arquivos específicos para facilitar a manutenção:
 
-### Arquivo Principal: `public/index.php`
-*   **PHP (Topo):** Contém a lógica de segurança (CSRF, Rate Limit), validação de formulário e envio de e-mail (PHPMailer).
-*   **HTML (Meio):** Estrutura do formulário.
-*   **CSS/JS (Fim):** Estilos customizados e validações de frontend.
+*   **`public/config.php`:** Configurações globais, **listas de filiais** e parâmetros de segurança.
+*   **`public/view.php`:** Frontend (HTML/CSS/JS).
+*   **`public/controller.php`:** Lógica de processamento e envio de e-mails.
 
-### Configurações Importantes
-No início do arquivo `public/index.php`, você pode alterar:
-*   `$filiais_permitidas`: Lista de filiais aceitas no formulário.
-*   `$tipos_permitidos`: Tipos de treinamento válidos.
+### 📍 Como Alterar as Filiais
+Para modificar a lista de filiais disponíveis no formulário, edite o arquivo **`public/config.php`**.
 
-### Logs e Debug
-Se `APP_ENV=local`, os e-mails **não** são enviados de verdade. Eles são salvos como `email_mock.html` na raiz do container/projeto para validação visual.
+Procure pela variável `$filiais_permitidas`. Ela deve ser mantida como um **Array Associativo**, onde:
+1.  **Chave (lado esquerdo):** É o código interno (slug). Use apenas letras minúsculas, sem espaços ou acentos (ex: `balneario_camboriu`).
+2.  **Valor (lado direito):** É o texto visível para o usuário. Pode conter acentos, espaços e maiúsculas (ex: `Balneário Camboriú`).
+
+**Exemplo de Configuração:**
+```php
+$filiais_permitidas = [
+    'matriz'             => 'Matriz Administrativa',
+    'florianopolis'      => 'Florianópolis (Centro)',
+    'balneario_camboriu' => 'Balneário Camboriú',
+    // Adicione novas filiais aqui seguindo o padrão
+];
+```
+
+⚠️ **IMPORTANTE: Codificação de Caracteres (UTF-8)**
+Ao editar este arquivo, certifique-se de que seu editor de código esteja salvando no formato **UTF-8**.
+*   Isso é obrigatório para que acentos (ç, ã, é) sejam exibidos corretamente no navegador e nos e-mails.
+*   Se os caracteres aparecerem estranhos (ex: `SÃ£o Paulo`), verifique a codificação do arquivo.
 
 ---
 

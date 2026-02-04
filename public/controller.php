@@ -66,8 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new Exception("E-mail inválido.");
         
         // Garante que o valor escolhido está na lista de permitidos (config.php)
-        if (!in_array($filial, $filiais_permitidas)) throw new Exception("Filial inválida.");
+        if (!array_key_exists($filial, $filiais_permitidas)) throw new Exception("Filial inválida.");
         if (!in_array($tipo, $tipos_permitidos)) throw new Exception("Tipo inválido.");
+
+        // Nome formatado da filial para e-mail e logs
+        $filial_nome = $filiais_permitidas[$filial];
 
         // Tratamento especial para campo "Outro"
         if ($tipo === 'outro') {
@@ -92,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mail->addReplyTo($email, $nome);
         
         $mail->isHTML(true);
-        $mail->Subject = "Treinamento: {$nome} - " . ucfirst($filial);
+        $mail->Subject = "Treinamento: {$nome} - {$filial_nome}";
         $mail->Body = "<h3>Registro de Treinamento</h3><p><strong>Nome:</strong> {$nome}</p><p><strong>Curso:</strong> {$curso}</p><p><strong>Duração:</strong> {$duracao_formatada}</p>";
 
         // Anexo (Upload Seguro)
@@ -107,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         registrar_log_master([
             'nome' => $nome,
             'email' => $email,
-            'filial' => $filial,
+            'filial' => $filial_nome,
             'departamento' => $departamento,
             'curso' => $curso,
             'tipo' => $tipo,
