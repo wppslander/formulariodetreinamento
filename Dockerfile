@@ -24,6 +24,10 @@ RUN composer install --no-dev --optimize-autoloader --no-scripts
 # Stage 2: Produção (Imagem Final Limpa)
 FROM php:8.2-apache
 
+# Configurar Fuso Horário (Brasília)
+ENV TZ=America/Sao_Paulo
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 WORKDIR /var/www/html
 
 # Configurar Apache DocumentRoot

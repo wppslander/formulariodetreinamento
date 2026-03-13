@@ -1,4 +1,37 @@
-Data/Hora,Nome,Email,Filial,Departamento,Curso,Tipo,Duracao,IP
-"2026-01-30 12:17:30",Testeiro,teste@teste.ip,matriz,Testador,TEste,presencial,4h,172.26.0.1
-"2026-01-30 13:31:20","Testando da Silva",teste@teste.com.br,aptec,TEstes,"TEstedores anonimos",presencial,150,172.26.0.1
-"2026-01-30 13:39:02",Fulano,e-commerce@digitalsat.com.br,matriz,e-commerce,opateste,online_vivo,745285292462,10.1.50.108
+﻿Data/Hora;Nome;Email;Filial;Departamento;Curso;Tipo;Duracao_Minutos;IP
+"2026-03-08 13:36:29";"Paulo Ricardo 54";colaborador1@digitalsat.com.br;"São José";TI;"Excel Avançado";online_gravado;130;189.100.2.123
+"2026-03-05 16:36:29";"Beatriz Souza 18";colaborador2@digitalsat.com.br;Joinville;Logística;"Segurança da Informação";outro;87;189.100.2.76
+"2026-01-31 13:36:29";"Fernanda Costa 18";colaborador3@digitalsat.com.br;Matriz;TI;"Atendimento ao Cliente";online_gravado;224;189.100.2.233
+"2026-02-08 07:36:29";"Beatriz Souza 78";colaborador4@digitalsat.com.br;Matriz;Diretoria;"LGPD na Prática";outro;289;189.100.2.194
+"2026-02-19 20:36:29";"Paulo Ricardo 75";colaborador5@digitalsat.com.br;Tubarao;Diretoria;"Segurança da Informação";online_vivo;455;189.100.2.181
+"2026-03-01 05:36:29";"Beatriz Souza 15";colaborador6@digitalsat.com.br;Matriz;TI;"Segurança da Informação";outro;434;189.100.2.56
+"2026-02-10 05:36:29";"Ana Silva 58";colaborador7@digitalsat.com.br;Tubarao;Diretoria;"Segurança da Informação";presencial;407;189.100.2.197
+"2026-02-12 07:36:29";"João Pedro 64";colaborador8@digitalsat.com.br;Blumenau;TI;"LGPD na Prática";online_gravado;161;189.100.2.119
+"2026-02-26 00:36:29";"Ana Silva 56";colaborador9@digitalsat.com.br;Joinville;RH;"Excel Avançado";outro;53;189.100.2.82
+"2026-02-16 23:36:29";"Mariana Oliveira 35";colaborador10@digitalsat.com.br;Blumenau;Logística;"Atendimento ao Cliente";presencial;76;189.100.2.237
+"2026-02-14 20:36:29";"João Pedro 85";colaborador11@digitalsat.com.br;Joinville;TI;"Gestão do Tempo";online_vivo;206;189.100.2.43
+"2026-02-23 17:36:29";"Ana Silva 67";colaborador12@digitalsat.com.br;Blumenau;RH;"Excel Avançado";online_vivo;51;189.100.2.71
+"2026-02-27 07:36:29";"Ana Silva 30";colaborador13@digitalsat.com.br;Matriz;RH;"LGPD na Prática";outro;168;189.100.2.145
+"2026-02-17 23:36:29";"Lucas Alves 73";colaborador14@digitalsat.com.br;"São José";Comercial;"Segurança da Informação";presencial;97;189.100.2.177
+"2026-02-03 16:36:29";"Carlos Eduardo 73";colaborador15@digitalsat.com.br;Matriz;Logística;"Excel Avançado";presencial;343;189.100.2.140
+"2026-01-30 20:36:29";"Carlos Eduardo 80";colaborador16@digitalsat.com.br;Joinville;Diretoria;"Prevenção a Incêndios";online_gravado;95;189.100.2.52
+"2026-03-08 07:36:29";"Lucas Alves 68";colaborador17@digitalsat.com.br;Joinville;RH;"LGPD na Prática";online_gravado;144;189.100.2.185
+"2026-01-30 21:36:29";"Beatriz Souza 58";colaborador18@digitalsat.com.br;Matriz;TI;"Excel Avançado";presencial;380;189.100.2.211
+"2026-03-02 06:36:29";"Mariana Oliveira 26";colaborador19@digitalsat.com.br;Tubarao;TI;"Excel Avançado";presencial;201;189.100.2.18
+"2026-02-01 18:36:29";"Beatriz Souza 87";colaborador20@digitalsat.com.br;Blumenau;TI;"Prevenção a Incêndios";online_vivo;409;189.100.2.233
+"2026-01-31 15:36:29";"Ana Silva 59";colaborador21@digitalsat.com.br;"São José";Diretoria;"Segurança da Informação";online_gravado;478;189.100.2.31
+"2026-03-05 21:36:29";"Lucas Alves 15";colaborador22@digitalsat.com.br;"São José";TI;"Gestão do Tempo";online_vivo;148;189.100.2.208
+"2026-02-11 21:36:29";"João Pedro 27";colaborador23@digitalsat.com.br;Matriz;Logística;"Prevenção a Incêndios";presencial;152;189.100.2.34
+"2026-02-13 21:36:29";"Paulo Ricardo 76";colaborador24@digitalsat.com.br;Tubarao;RH;"LGPD na Prática";online_vivo;140;189.100.2.171
+"2026-02-17 00:36:29";"Carlos Eduardo 11";colaborador25@digitalsat.com.br;Blumenau;RH;"Prevenção a Incêndios";online_gravado;323;189.100.2.218
+"2026-02-07 19:36:29";"Lucas Alves 21";colaborador26@digitalsat.com.br;"São José";Logística;"Excel Avançado";online_vivo;354;189.100.2.197
+"2026-02-09 03:36:29";"Beatriz Souza 40";colaborador27@digitalsat.com.br;"São José";RH;"Gestão do Tempo";presencial;348;189.100.2.96
+"2026-01-28 14:36:29";"João Pedro 27";colaborador28@digitalsat.com.br;Tubarao;Diretoria;"Atendimento ao Cliente";online_vivo;220;189.100.2.227
+"2026-02-01 11:36:29";"Fernanda Costa 96";colaborador29@digitalsat.com.br;Blumenau;TI;"LGPD na Prática";online_vivo;100;189.100.2.95
+"2026-01-26 16:36:29";"Paulo Ricardo 31";colaborador30@digitalsat.com.br;Joinville;Diretoria;"Atendimento ao Cliente";online_gravado;293;189.100.2.57
+"2026-01-31 18:36:29";"Paulo Ricardo 56";colaborador31@digitalsat.com.br;Tubarao;TI;"Gestão do Tempo";online_vivo;367;189.100.2.140
+"2026-02-05 17:36:29";"Lucas Alves 42";colaborador32@digitalsat.com.br;Blumenau;Logística;"Prevenção a Incêndios";outro;402;189.100.2.96
+"2026-03-07 13:36:29";"João Pedro 49";colaborador33@digitalsat.com.br;"São José";Comercial;"Excel Avançado";outro;147;189.100.2.193
+"2026-02-07 16:36:29";"Ana Silva 21";colaborador34@digitalsat.com.br;Tubarao;Diretoria;"LGPD na Prática";presencial;385;189.100.2.163
+"2026-03-05 19:36:29";"Ana Silva 21";colaborador35@digitalsat.com.br;Matriz;Comercial;"Prevenção a Incêndios";outro;272;189.100.2.126
+"2026-03-12 18:07:06";"Daniel Wppslander Campos de Carvalho";daniel.ti@digitalsat.com.br;Matriz;TI;"Intelbras Certificação em Redes - Associado | ICR-A";"Outro: Prova";720;172.22.0.1

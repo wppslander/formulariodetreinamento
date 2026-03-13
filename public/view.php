@@ -165,8 +165,28 @@
 <div class="container pb-5">
     <div class="job-form">
         
-        <!-- Área de Mensagens (Sucesso/Erro vindos do Controller) -->
-        <?php echo $message; ?>
+        <?php
+            // Lógica para processar a mensagem do Controller
+            $msg_data = !empty($message) ? json_decode($message, true) : null;
+        ?>
+
+        <!-- Modal de Feedback (Sucesso/Erro) -->
+        <div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-<?php echo isset($msg_data['type']) ? $msg_data['type'] : 'primary'; ?> text-white border-0">
+                        <h5 class="modal-title fw-bold" id="feedbackModalLabel"><?php echo isset($msg_data['title']) ? $msg_data['title'] : 'Aviso'; ?></h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-center">
+                        <div class="fs-5"><?php echo isset($msg_data['body']) ? $msg_data['body'] : ''; ?></div>
+                    </div>
+                    <div class="modal-footer border-0 justify-content-center pb-4">
+                        <button type="button" class="btn btn-secondary px-4 rounded-pill" data-bs-dismiss="modal">Entendido</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <h1>
             <img src="https://loja.digitalsat.com.br/imagem/logo-store/index/2?v=68468041b7f0a7698a97772f2c9fda4d" alt="DigitalSat Logo">
@@ -210,7 +230,12 @@
                 </div>
                 <div class="col-md-6">
                     <label for="departamento">Departamento</label>
-                    <input type="text" id="departamento" name="departamento" required>
+                    <select id="departamento" name="departamento" required>
+                        <option value="" selected disabled>Selecione:</option>
+                        <?php foreach($departamentos_permitidos as $slug_dep => $nome_dep): ?>
+                            <option value="<?php echo $slug_dep; ?>"><?php echo $nome_dep; ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
             </div>
 
@@ -224,27 +249,37 @@
                 <input type="text" id="curso" name="curso" required>
             </div>
 
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label for="data_conclusao">Data de Conclusão</label>
+                    <input type="text" id="data_conclusao" name="data_conclusao" required placeholder="DD/MM/AAAA">
+                </div>
+                <div class="col-md-6">
+                    <label>Modalidade</label>
+                    <div class="pt-2">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="tipo_treinamento" id="presencial" value="presencial" required>
+                            <label class="form-check-label" for="presencial">Presencial</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="tipo_treinamento" id="online_vivo" value="online_vivo">
+                            <label class="form-check-label" for="online_vivo">Online (Ao Vivo)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="tipo_treinamento" id="online_gravado" value="online_gravado">
+                            <label class="form-check-label" for="online_gravado">Online (Gravado)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="tipo_treinamento" id="outro" value="outro">
+                            <label class="form-check-label" for="outro">Outro</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Campo condicional (aparece via JS se 'Outro' for selecionado) -->
             <div class="mb-3">
-                <label>Modalidade</label>
-                <!-- Opções de Radio Button -->
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="tipo_treinamento" id="presencial" value="presencial" required>
-                    <label class="form-check-label" for="presencial">Presencial</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="tipo_treinamento" id="online_vivo" value="online_vivo">
-                    <label class="form-check-label" for="online_vivo">Online (Ao Vivo)</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="tipo_treinamento" id="online_gravado" value="online_gravado">
-                    <label class="form-check-label" for="online_gravado">Online (Gravado)</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="tipo_treinamento" id="outro" value="outro">
-                    <label class="form-check-label" for="outro">Outro</label>
-                </div>
-                <!-- Campo condicional (aparece via JS se 'Outro' for selecionado) -->
                 <input type="text" class="mt-2" id="outro_texto" name="outro_texto" placeholder="Especifique qual..." style="display:none;">
+            </div>
             </div>
 
             <!-- Inputs de Duração (Horas + Minutos) -->
@@ -253,13 +288,13 @@
                 <div class="row g-2">
                     <div class="col-6">
                         <div class="input-group">
-                            <input type="number" id="duracao_horas" name="duracao_horas" min="0" required placeholder="0">
+                            <input type="number" id="duracao_horas" name="duracao_horas" min="0" placeholder="0">
                             <span class="input-group-text">Horas</span>
                         </div>
                     </div>
                     <div class="col-6">
                         <div class="input-group">
-                            <input type="number" id="duracao_minutos" name="duracao_minutos" min="0" max="59" required placeholder="0">
+                            <input type="number" id="duracao_minutos" name="duracao_minutos" min="0" max="59" placeholder="0">
                             <span class="input-group-text">Minutos</span>
                         </div>
                     </div>
@@ -284,8 +319,15 @@
 
 <!-- Scripts JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vanilla-masker@1.2.0/build/vanilla-masker.min.js"></script>
 
 <script>
+    // --- Configuração de Máscaras ---
+    const dataInput = document.getElementById('data_conclusao');
+    if (dataInput) {
+        VMasker(dataInput).maskPattern('99/99/9999');
+    }
+
     // --- Lógica de Interatividade ---
 
     // 1. Mostrar/Esconder campo "Outro"
@@ -326,6 +368,14 @@
             }, false)
         })
     })()
+
+    // 3. Mostrar modal se houver mensagem do PHP
+    <?php if ($msg_data): ?>
+    document.addEventListener('DOMContentLoaded', function() {
+        const feedbackModal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+        feedbackModal.show();
+    });
+    <?php endif; ?>
 </script>
 </body>
 </html>

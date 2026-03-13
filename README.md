@@ -34,22 +34,30 @@ Na raiz do projeto:
 ```bash
 docker compose up -d --build
 ```
-Acesse: **http://localhost:{porta_designada}**
+Acesse: **http://localhost:8081** *(A porta está configurada no `docker-compose.yml`)*
 
 ---
 
-## 📊 Auditoria e Relatórios (NOVO)
+## ⏰ Configuração de Fuso Horário (Timezone)
+
+A aplicação está configurada para rodar nativamente utilizando o **Horário de Brasília (`America/Sao_Paulo`)**.
+*   A variável de ambiente `TZ=America/Sao_Paulo` é repassada via `docker-compose.yml`.
+*   O pacote `tzdata` é instalado e configurado no `Dockerfile` durante o build da imagem, garantindo que o sistema operacional do container (Debian/Ubuntu) e as funções de data/hora do PHP (como relatórios e logs) obedeçam ao horário correto.
+
+---
+
+## 📊 Auditoria e Relatórios
 
 O sistema mantém um registro permanente (CSV) de todos os envios para fins de auditoria.
 
-*   **Localização:** Os arquivos são salvos na pasta `./reports/` (persistida fora do container).
+*   **Localização:** Os arquivos são salvos na pasta `./reports/` (persistida fora do container via volumes).
 *   **Dados Coletados:** Data/Hora, Dados do Funcionário, Curso, Duração e **IP de Origem** (com suporte a Proxy/X-Forwarded-For).
 
 ### Envio de Relatório para o RH
 Para enviar o CSV acumulado para o e-mail de auditoria, acesse a seguinte URL no navegador:
 
 ```
-http://seu-servidor/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
+http://seu-servidor:8081/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
 ```
 
 *   O relatório é enviado para o e-mail configurado em `REPORT_DESTINATION` no arquivo `.env`.
@@ -57,11 +65,11 @@ http://seu-servidor/?action=enviar_relatorio&token=SEU_TOKEN_AQUI
 *   Se o token for inválido, o acesso será negado.
 
 #### ⏰ Automação (Cron Job)
-Para que o relatório seja enviado automaticamente (ex: todo dia 23 do mês), configure um **Cron Job** no painel da sua hospedagem (cPanel/Tarefa Agendada) para executar o seguinte comando:
+Para que o relatório seja enviado automaticamente (ex: todo dia 23 do mês), configure um **Cron Job** no painel da sua hospedagem (cPanel/Tarefa Agendada) ou via Crontab no servidor Linux para executar o seguinte comando:
 
 ```bash
 # Exemplo usando CURL (Chamada via URL)
-curl -s "http://seu-servidor/?action=enviar_relatorio&token=SEU_TOKEN_AQUI" > /dev/null 2>&1
+curl -s "http://seu-servidor:8081/?action=enviar_relatorio&token=SEU_TOKEN_AQUI" > /dev/null 2>&1
 ```
 
 Configure a frequência para: `0 9 23 * *` (Todo dia 23 às 09:00h).
@@ -70,11 +78,13 @@ Configure a frequência para: `0 9 23 * *` (Todo dia 23 às 09:00h).
 
 ## 🛠️ Personalização e Configuração
 
-A estrutura do projeto está organizada em arquivos específicos para facilitar a manutenção:
+A estrutura do projeto está organizada em arquivos modulares na pasta `public/` para facilitar a manutenção:
 
-*   **`public/config.php`:** Configurações globais, **listas de filiais** e parâmetros de segurança.
-*   **`public/view.php`:** Frontend (HTML/CSS/JS).
-*   **`public/controller.php`:** Lógica de processamento e envio de e-mails.
+*   **`index.php`:** Bootstrap que carrega dependências e une todos os arquivos.
+*   **`config.php`:** Configurações globais, **listas de filiais** e parâmetros de segurança.
+*   **`functions.php`:** Funções auxiliares (validações, formatação).
+*   **`controller.php`:** Lógica de processamento e envio de e-mails/relatórios.
+*   **`view.php`:** Frontend (HTML/CSS/JS).
 
 ### 📍 Como Alterar as Filiais
 Para modificar a lista de filiais disponíveis no formulário, edite o arquivo **`public/config.php`**.

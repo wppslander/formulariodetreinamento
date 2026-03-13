@@ -18,4 +18,4 @@ public/email_mock.html
 
 # IDEs
 .idea/
-.vscode/
+.vscode/public/email_mock*.html

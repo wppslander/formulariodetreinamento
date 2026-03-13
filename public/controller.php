@@ -8,22 +8,7 @@
 $message = ''; // Variável que armazenará feedbacks (sucesso/erro) para a View
 
 // ==============================================================================
-// 1. ROTA ADMINISTRATIVA (Envio de Relatório para RH)
-// ==============================================================================
-// Gatilho via URL: ?action=enviar_relatorio&token=SEGREDO
-if (isset($_GET['action']) && $_GET['action'] === 'enviar_relatorio') {
-    $token = $_GET['token'] ?? '';
-    
-    // Verifica se o token bate com o definido no .env
-    if ($token === ($_ENV['ADMIN_TOKEN'] ?? '')) {
-        enviar_relatorio_rh(REPORTS_DIR); // Chama função em functions.php
-    } else {
-        die("Acesso Negado: Token inválido.");
-    }
-}
-
-// ==============================================================================
-// 2. PROCESSAMENTO DO FORMULÁRIO (POST)
+// 1. PROCESSAMENTO DO FORMULÁRIO (POST)
 // ==============================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -42,16 +27,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // --- B. Coleta e Sanitização de Dados ---
         
         // Limpa tags HTML e espaços em branco para evitar XSS
-        $email = filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL);
+        $email = filter_var($_POST['email'] ?? '', FILTER_SANITIZE_EMAIL);
         $nome = trim(htmlspecialchars(strip_tags($_POST['nome'] ?? ''), ENT_QUOTES, 'UTF-8'));
         $filial = $_POST['filial'] ?? '';
-        $departamento = trim(htmlspecialchars(strip_tags($_POST['departamento'] ?? ''), ENT_QUOTES, 'UTF-8'));
+        $departamento_slug = $_POST['departamento'] ?? '';
         $curso = trim(htmlspecialchars(strip_tags($_POST['curso'] ?? ''), ENT_QUOTES, 'UTF-8'));
         $tipo = $_POST['tipo_treinamento'] ?? '';
         
         // Duração: Converte inputs separados em total de minutos
-        $horas = filter_input(INPUT_POST, 'duracao_horas', FILTER_VALIDATE_INT) ?: 0;
-        $minutos = filter_input(INPUT_POST, 'duracao_minutos', FILTER_VALIDATE_INT) ?: 0;
+        $horas = filter_var($_POST['duracao_horas'] ?? 0, FILTER_VALIDATE_INT) ?: 0;
+        $minutos = filter_var($_POST['duracao_minutos'] ?? 0, FILTER_VALIDATE_INT) ?: 0;
 
         // Valida se a duração faz sentido (não pode ser zero ou negativa)
         if ($horas < 0 || $minutos < 0 || ($horas == 0 && $minutos == 0)) {
@@ -67,10 +52,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Garante que o valor escolhido está na lista de permitidos (config.php)
         if (!array_key_exists($filial, $filiais_permitidas)) throw new Exception("Filial inválida.");
+        if (!array_key_exists($departamento_slug, $departamentos_permitidos)) throw new Exception("Departamento inválido.");
         if (!in_array($tipo, $tipos_permitidos)) throw new Exception("Tipo inválido.");
 
-        // Nome formatado da filial para e-mail e logs
+        // Nomes formatados para e-mail e logs
         $filial_nome = $filiais_permitidas[$filial];
+        $departamento_nome = $departamentos_permitidos[$departamento_slug];
 
         // Tratamento especial para campo "Outro"
         if ($tipo === 'outro') {
@@ -82,28 +69,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         $mail = new PHPMailer\PHPMailer\PHPMailer(true);
         $mail->CharSet = 'UTF-8';
-        $mail->isSMTP();
-        $mail->Host       = $_ENV['SMTP_HOST'];
-        $mail->SMTPAuth   = true;
-        $mail->Username   = $_ENV['SMTP_USER'];
-        $mail->Password   = $_ENV['SMTP_PASS'];
-        $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = $_ENV['SMTP_PORT'];
-
-        $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Treinamentos');
-        $mail->addAddress($_ENV['SMTP_USER']);
-        $mail->addReplyTo($email, $nome);
         
-        $mail->isHTML(true);
-        $mail->Subject = "Treinamento: {$nome} - {$filial_nome}";
-        $mail->Body = "<h3>Registro de Treinamento</h3><p><strong>Nome:</strong> {$nome}</p><p><strong>Curso:</strong> {$curso}</p><p><strong>Duração:</strong> {$duracao_formatada}</p>";
+        // Verifica se estamos em ambiente de teste/local para não disparar e-mail real
+        if (($_ENV['APP_ENV'] ?? 'local') === 'local') {
+            // MOCK: Em vez de enviar, gera um arquivo HTML para visualização
+            $mock_content = "<h2>MOCK EMAIL - AMBIENTE LOCAL</h2><hr>";
+            $mock_content .= "<strong>De:</strong> DigitalSat Treinamentos <br>";
+            $mock_content .= "<strong>Para:</strong> " . ($_ENV['SMTP_USER'] ?? 'rh@digitalsat.com.br') . "<br>";
+            $mock_content .= "<strong>Assunto:</strong> Treinamento: {$nome} - {$filial_nome}<hr>";
+            $mock_content .= "<h3>Registro de Treinamento</h3><p><strong>Nome:</strong> {$nome}</p><p><strong>Curso:</strong> {$curso}</p><p><strong>Duração:</strong> {$duracao_formatada}</p>";
+            
+            // Se houver anexo, avisa no mock
+            if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] == UPLOAD_ERR_OK) {
+                $mock_content .= "<hr><p>📎 <strong>Anexo:</strong> " . $_FILES['comprovante']['name'] . "</p>";
+            }
 
-        // Anexo (Upload Seguro)
-        if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] == UPLOAD_ERR_OK) {
-            $mail->addAttachment($_FILES['comprovante']['tmp_name'], $_FILES['comprovante']['name']);
+            file_put_contents(__DIR__ . '/email_mock.html', $mock_content);
+        } else {
+            // ENVIO REAL (Produção)
+            $mail->isSMTP();
+            $mail->Host       = $_ENV['SMTP_HOST'];
+            $mail->SMTPAuth   = true;
+            $mail->Username   = $_ENV['SMTP_USER'];
+            $mail->Password   = $_ENV['SMTP_PASS'];
+            $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port       = $_ENV['SMTP_PORT'];
+
+            $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Treinamentos');
+            // O registro agora vai para o e-mail de relatório definido no .env
+            $destinatario = $_ENV['REPORT_DESTINATION'] ?? 'daniel.ti@digitalsat.com.br';
+            $mail->addAddress($destinatario);
+            $mail->addReplyTo($email, $nome);
+            
+            $mail->isHTML(true);
+            $mail->Subject = "Treinamento: {$nome} - {$filial_nome}";
+            $mail->Body = "<h3>Registro de Treinamento</h3>
+                           <p><strong>Nome:</strong> {$nome}</p>
+                           <p><strong>Filial:</strong> {$filial_nome}</p>
+                           <p><strong>Departamento:</strong> {$departamento_nome}</p>
+                           <p><strong>Curso:</strong> {$curso}</p>
+                           <p><strong>Duração:</strong> {$duracao_formatada}</p>";
+
+            // Anexo (Upload Seguro)
+            if (isset($_FILES['comprovante']) && $_FILES['comprovante']['error'] == UPLOAD_ERR_OK) {
+                $mail->addAttachment($_FILES['comprovante']['tmp_name'], $_FILES['comprovante']['name']);
+            }
+
+            $mail->send();
         }
-
-        $mail->send();
 
         // --- E. Auditoria (CSV) ---
         
@@ -111,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'nome' => $nome,
             'email' => $email,
             'filial' => $filial_nome,
-            'departamento' => $departamento,
+            'departamento' => $departamento_nome,
             'curso' => $curso,
             'tipo' => $tipo,
             'duracao' => $total_minutos // Salva como Inteiro
@@ -121,10 +134,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['last_submit'] = time();
         
         // Mensagem de Sucesso
-        $message = '<div class="alert alert-success border-0 shadow-sm">✅ Registro enviado e arquivado com sucesso!</div>';
+        $message = json_encode([
+            'type' => 'success',
+            'title' => 'Sucesso!',
+            'body' => '✅ Seu treinamento foi registrado e enviado com sucesso para o RH.'
+        ]);
 
     } catch (Exception $e) {
         // Mensagem de Erro (captura qualquer problema acima)
-        $message = '<div class="alert alert-danger border-0 shadow-sm">❌ ' . $e->getMessage() . '</div>';
+        // Se for um erro do PHPMailer, o $e->getMessage() já deve conter detalhes.
+        $error_msg = $e->getMessage();
+        
+        // Se estivermos usando o PHPMailer e houver um erro específico dele, podemos tentar capturá-lo
+        if (isset($mail) && !empty($mail->ErrorInfo)) {
+            $error_msg .= " (SMTP Error: " . $mail->ErrorInfo . ")";
+        }
+
+        $message = json_encode([
+            'type' => 'danger',
+            'title' => 'Ops! Algo deu errado',
+            'body' => '❌ Erro: ' . $error_msg . '<br><br><strong>Por favor, entre em contato com o departamento de RH para realizar seu registro manualmente.</strong>'
+        ]);
     }
 }

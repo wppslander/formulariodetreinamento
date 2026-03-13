@@ -23,19 +23,36 @@ session_start();
 // Se um atacante tentar enviar 'filial=hacker', será bloqueado.
 
 $filiais_permitidas = [
-    'matriz'             => 'Matriz',
     'aptec'              => 'Aptec',
+    'balneario_camboriu' => 'Balneário Camboriú',
     'blumenau'           => 'Blumenau',
-    'itapema'            => 'Itapema',
-    'balneario_camboriu' => 'Balneário Camboriú', 
-    'itajai'             => 'Itajaí',
     'brusque'            => 'Brusque',
+    'gravatai'           => 'Gravataí',
+    'itajai'             => 'Itajaí',
+    'itapema'            => 'Itapema',
     'joinville'          => 'Joinville',
-    'rio_do_sul'         => 'Rio do Sul',
-    'gravatai'           => 'Gravataí', 
     'lages'              => 'Lages',
+    'matriz'             => 'Matriz',
+    'rio_do_sul'         => 'Rio do Sul',
     'sao_jose'           => 'São José',
     'tubarao'            => 'Tubarão'
+];
+
+$departamentos_permitidos = [
+    'solar'                 => 'Solar',
+    'projetos'              => 'Projetos',
+    'pos_vendas'            => 'Pós Vendas',
+    'controladoria'         => 'Controladoria',
+    'logistica'             => 'Logística',
+    'gestao_pessoas'        => 'Gestão de Pessoas',
+    'ti'                    => 'TI',
+    'relacionamento'        => 'Relacionamento',
+    'financeiro'            => 'Financeiro',
+    'adm_filial'            => 'Administrativo Filial',
+    'adm_matriz'            => 'Administrativo Matriz',
+    'marketing'             => 'Marketing',
+    'redes'                 => 'Redes',
+    'comercial'             => 'Comercial'
 ];
 
 $tipos_permitidos = ['presencial', 'online_vivo', 'online_gravado', 'outro'];
