@@ -280,7 +280,6 @@
             <div class="mb-3">
                 <input type="text" class="mt-2" id="outro_texto" name="outro_texto" placeholder="Especifique qual..." style="display:none;">
             </div>
-            </div>
 
             <!-- Inputs de Duração (Horas + Minutos) -->
             <div class="mb-3">
