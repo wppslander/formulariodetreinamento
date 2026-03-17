@@ -5,160 +5,221 @@
  */
 
 /**
+ * Estabelece conexão com o banco de dados SQLite via PDO.
+ function conectar_db() {
+     $db_dir = dirname(__DIR__) . '/reports';
+     $db_file = $db_dir . '/database.sqlite';
+
+     // Verificação de Produção: Se a pasta ou arquivo não forem graváveis, avisa no log
+     if (file_exists($db_file) && !is_writable($db_file)) {
+         error_log("AVISO: O arquivo do banco de dados existe mas NÃO é gravável pelo servidor.");
+     }
+     if (is_dir($db_dir) && !is_writable($db_dir)) {
+         error_log("AVISO: A pasta de relatórios NÃO é gravável. O SQLite pode falhar ao criar travas (locks).");
+     }
+
+     try {
+         $pdo = new PDO('sqlite:' . $db_file);
+ ...
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        return $pdo;
+    } catch (Exception $e) {
+        error_log("Erro de conexão com o banco: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Registra um novo treinamento no banco de dados SQLite (Normalizado).
+ */
+function registrar_treinamento_db($dados) {
+    $db = conectar_db();
+    if (!$db) return false;
+
+    try {
+        // Busca IDs das tabelas auxiliares baseado nos slugs enviados do formulário
+        
+        // 1. Filial ID
+        $stmtF = $db->prepare("SELECT id FROM filiais WHERE slug = ?");
+        $stmtF->execute([$dados['filial']]);
+        $filial_id = $stmtF->fetchColumn();
+
+        // 2. Departamento ID
+        $stmtD = $db->prepare("SELECT id FROM departamentos WHERE slug = ?");
+        $stmtD->execute([$dados['departamento']]);
+        $departamento_id = $stmtD->fetchColumn();
+
+        // 3. Modalidade ID
+        $stmtM = $db->prepare("SELECT id FROM modalidades WHERE slug = ?");
+        $stmtM->execute([$dados['tipo']]);
+        $modalidade_id = $stmtM->fetchColumn();
+
+        // IP Real
+        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_CLIENT_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        if (strpos($ip, ',') !== false) $ip = explode(',', $ip)[0];
+
+        // Insert Principal
+        $sql = "INSERT INTO treinamentos 
+                (nome, email, filial_id, departamento_id, curso, data_conclusao, modalidade_id, outro_texto, duracao_minutos, status, ip_origem) 
+                VALUES (:nome, :email, :filial_id, :departamento_id, :curso, :data_conclusao, :modalidade_id, :outro_texto, :duracao_minutos, :status, :ip_origem)";
+        
+        $stmt = $db->prepare($sql);
+        $stmt->execute([
+            ':nome'            => $dados['nome'],
+            ':email'           => $dados['email'],
+            ':filial_id'       => $filial_id,
+            ':departamento_id' => $departamento_id,
+            ':curso'           => $dados['curso'],
+            ':data_conclusao'  => $dados['data_conclusao'],
+            ':modalidade_id'   => $modalidade_id,
+            ':outro_texto'     => $dados['outro_texto'] ?? null,
+            ':duracao_minutos' => $dados['duracao'], // Já vem convertido em minutos do controller
+            ':status'          => 'Pendente',
+            ':ip_origem'       => trim($ip)
+        ]);
+
+        return true;
+    } catch (Exception $e) {
+        error_log("Erro ao salvar treinamento no DB: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Formata minutos para o padrão "Xh Ym" para exibição.
+ */
+function exibir_duracao_formatada($minutos) {
+    $minutos = intval($minutos);
+    $h = floor($minutos / 60);
+    $m = $minutos % 60;
+    
+    if ($h > 0 && $m > 0) return "{$h}h {$m}m";
+    if ($h > 0) return "{$h}h";
+    return "{$m}min";
+}
+
+/**
  * Sanitiza um campo para evitar CSV Injection (Formula Injection).
- * Se o campo começar com caracteres que o Excel interpreta como fórmula, 
- * adiciona uma aspa simples no início.
- * 
- * @param string|int $valor
- * @return string|int
  */
 function sanitizar_csv_campo($valor) {
     if (is_numeric($valor)) return $valor;
-    
-    // Caracteres perigosos no início de uma célula do Excel
     $perigosos = ['=', '+', '-', '@', "\t", "\r"];
-    
     $primeiroChar = substr((string)$valor, 0, 1);
-    
     if (in_array($primeiroChar, $perigosos, true)) {
         return "'" . $valor;
     }
-    
     return $valor;
 }
 
 /**
- * Registra o log de auditoria no CSV Master.
- * Utiliza Locking (trava de arquivo) para suportar escritas concorrentes.
- * 
- * @param array $dados Array associativo com os dados do formulário
- * @param string $reportsDir Caminho absoluto para a pasta de relatórios
+ * Registra o log de auditoria no CSV Master (Mantido como redundância por enquanto).
  */
 function registrar_log_master($dados, $reportsDir) {
     $arquivo = $reportsDir . '/treinamentos_master.csv';
-
-    // Garante que a pasta existe (com permissão segura 0755)
-    if (!is_dir($reportsDir)) {
-        if (!mkdir($reportsDir, 0755, true)) {
-            throw new Exception("Não foi possível criar o diretório de relatórios. Verifique as permissões da pasta.");
-        }
-    }
+    if (!is_dir($reportsDir)) mkdir($reportsDir, 0755, true);
 
     $novoArquivo = !file_exists($arquivo);
-    $handle = fopen($arquivo, 'a'); // Abre para append (adicionar no final)
+    $handle = fopen($arquivo, 'a');
+    if (!$handle) return;
     
-    if (!$handle) {
-        throw new Exception("Não foi possível abrir o arquivo de registro para escrita.");
-    }
-    
-    // Bloqueia o arquivo para escrita exclusiva (evita corrupção)
     flock($handle, LOCK_EX);
+    if ($novoArquivo) {
+        fwrite($handle, "\xEF\xBB\xBF");
+        fputcsv($handle, ['ID', 'Data/Hora', 'Nome', 'Email', 'Filial', 'Departamento', 'Curso', 'Tipo', 'Duracao_Minutos', 'Status', 'IP'], ';');
+    }
 
-        // Se o arquivo acabou de ser criado, adiciona o BOM UTF-8 e o cabeçalho
-        if ($novoArquivo) {
-            // BOM UTF-8 para o Excel reconhecer a codificação corretamente
-            fwrite($handle, "\xEF\xBB\xBF");
-            fputcsv($handle, ['ID', 'Data/Hora', 'Nome', 'Email', 'Filial', 'Departamento', 'Curso', 'Tipo', 'Duracao_Minutos', 'Status', 'IP'], ';');
-        }
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_CLIENT_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    if (strpos($ip, ',') !== false) $ip = explode(',', $ip)[0];
 
-        // --- Detecção de IP Real ---
-        // Tenta pegar o IP real mesmo se estiver atrás de um Proxy ou Docker
-        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_CLIENT_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-        
-        // Se houver uma lista de IPs (ex: "client, proxy1, proxy2"), pega o primeiro
-        if (strpos($ip, ',') !== false) {
-            $ip = explode(',', $ip)[0];
-        }
+    $linha = [
+        uniqid('tr_'),
+        date('Y-m-d H:i:s'),
+        sanitizar_csv_campo($dados['nome']),
+        sanitizar_csv_campo($dados['email']),
+        sanitizar_csv_campo($dados['filial']),
+        sanitizar_csv_campo($dados['departamento']),
+        sanitizar_csv_campo($dados['curso']),
+        sanitizar_csv_campo($dados['tipo']),
+        $dados['duracao'],
+        'Pendente',
+        trim($ip)
+    ];
 
-        // Prepara os dados sanitizando contra CSV Injection
-        $linha = [
-            uniqid('tr_'), // ID Único
-            date('Y-m-d H:i:s'),
-            sanitizar_csv_campo($dados['nome']),
-            sanitizar_csv_campo($dados['email']),
-            sanitizar_csv_campo($dados['filial']),
-            sanitizar_csv_campo($dados['departamento']),
-            sanitizar_csv_campo($dados['curso']),
-            sanitizar_csv_campo($dados['tipo']),
-            $dados['duracao'], // Já é numérico
-            'Pendente', // Status inicial
-            trim($ip)
-        ];
-
-        // Escreve a linha no CSV usando ponto e vírgula como delimitador (padrão Brasil/Excel)
-        fputcsv($handle, $linha, ';');
-
-        // Libera o arquivo e fecha
-        flock($handle, LOCK_UN);
-        fclose($handle);
+    fputcsv($handle, $linha, ';');
+    flock($handle, LOCK_UN);
+    fclose($handle);
 }
 
 /**
- * Atualiza o status de um treinamento no CSV.
+ * Atualiza o status de um treinamento.
+ * Agora suporta tanto DB quanto CSV (migração gradual).
  */
 function atualizar_status_treinamento($id, $novoStatus, $reportsDir) {
+    // 1. Atualiza no Banco de Dados
+    $db = conectar_db();
+    if ($db) {
+        $stmt = $db->prepare("UPDATE treinamentos SET status = ? WHERE id = ?");
+        $stmt->execute([$novoStatus, $id]);
+    }
+
+    // 2. Atualiza no CSV (Redundância legada)
     $arquivo = $reportsDir . '/treinamentos_master.csv';
-    if (!file_exists($arquivo)) return false;
+    if (!file_exists($arquivo)) return true;
 
     $temp = tempnam(sys_get_temp_dir(), 'csv');
     $handle = fopen($arquivo, 'r');
     $out = fopen($temp, 'w');
     
-    $sucesso = false;
     if ($handle && $out) {
         while (($data = fgetcsv($handle, 0, ';')) !== FALSE) {
-            if ($data[0] === $id) {
-                // Assume que Status é a penúltima coluna (índice 9 se houver 11 colunas)
-                // Vamos encontrar o índice do cabeçalho para ser mais seguro
+            if ($data[0] === $id || $data[0] === "tr_$id" || "tr_".$id === $data[0]) {
                 if (!isset($statusIdx)) {
                     $statusIdx = array_search('Status', $data);
                     if ($statusIdx === false) $statusIdx = 9; 
                 }
                 $data[$statusIdx] = $novoStatus;
-                $sucesso = true;
             }
             fputcsv($out, $data, ';');
         }
         fclose($handle);
         fclose($out);
-        
-        if ($sucesso) {
-            copy($temp, $arquivo);
-        }
+        copy($temp, $arquivo);
         unlink($temp);
     }
-    return $sucesso;
+    return true;
 }
 
 /**
- * Exclui um treinamento do CSV.
+ * Exclui um treinamento.
  */
 function excluir_treinamento($id, $reportsDir) {
+    // 1. Exclui no Banco de Dados
+    $db = conectar_db();
+    if ($db) {
+        $stmt = $db->prepare("DELETE FROM treinamentos WHERE id = ?");
+        $stmt->execute([$id]);
+    }
+
+    // 2. Exclui no CSV
     $arquivo = $reportsDir . '/treinamentos_master.csv';
-    if (!file_exists($arquivo)) return false;
+    if (!file_exists($arquivo)) return true;
 
     $temp = tempnam(sys_get_temp_dir(), 'csv');
     $handle = fopen($arquivo, 'r');
     $out = fopen($temp, 'w');
     
-    $sucesso = false;
     if ($handle && $out) {
         while (($data = fgetcsv($handle, 0, ';')) !== FALSE) {
-            if ($data[0] === $id) {
-                $sucesso = true;
-                continue; // Pula a linha para excluir
-            }
+            if ($data[0] === $id) continue;
             fputcsv($out, $data, ';');
         }
         fclose($handle);
         fclose($out);
-        
-        if ($sucesso) {
-            copy($temp, $arquivo);
-        }
+        copy($temp, $arquivo);
         unlink($temp);
     }
-    return $sucesso;
+    return true;
 }
 
 /**
@@ -172,8 +233,7 @@ function registrar_audit_admin($acao, $id, $reportsDir) {
 }
 
 /**
- * Verifica se já se passaram 7 dias desde o último envio automático
- * e dispara o relatório para o RH se necessário.
+ * Verifica se já se passaram 7 dias desde o último envio automático.
  */
 function verificar_e_enviar_relatorio_semanal($reportsDir) {
     $controleFile = $reportsDir . '/last_automated_send.txt';
@@ -184,14 +244,12 @@ function verificar_e_enviar_relatorio_semanal($reportsDir) {
         $enviar = true;
     } else {
         $ultimaVez = (int)file_get_contents($controleFile);
-        // 7 dias em segundos = 7 * 24 * 60 * 60 = 604800
         if (($hoje - $ultimaVez) >= 604800) {
             $enviar = true;
         }
     }
 
     if ($enviar) {
-        // Tenta enviar o relatório silenciosamente
         if (enviar_relatorio_rh($reportsDir, true)) {
             file_put_contents($controleFile, $hoje);
             return true;
@@ -201,12 +259,10 @@ function verificar_e_enviar_relatorio_semanal($reportsDir) {
 }
 
 /**
- * Envia o relatório CSV completo por e-mail para o RH.
- * @param bool $silent Se true, não dá echo nem exit (usado no envio automático)
+ * Envia o relatório CSV por e-mail para o RH.
  */
 function enviar_relatorio_rh($reportsDir, $silent = false) {
     $arquivo = $reportsDir . '/treinamentos_master.csv';
-    
     if (!file_exists($arquivo)) {
         if ($silent) return false;
         die("Nenhum relatório encontrado para enviar.");
@@ -219,7 +275,6 @@ function enviar_relatorio_rh($reportsDir, $silent = false) {
             $mock_content = "<h2>MOCK RELATÓRIO AUTOMÁTICO RH</h2><hr>";
             $mock_content .= "<strong>Para:</strong> {$destinatario}<hr>";
             $mock_content .= "<strong>Assunto:</strong> [AUTOMÁTICO] Relatório Semanal de Treinamentos - " . date('d/m/Y') . "<br>";
-            
             file_put_contents(dirname(__DIR__) . '/public/email_mock_relatorio.html', $mock_content);
             if (!$silent) echo "✅ MOCK: Relatório gerado em email_mock_relatorio.html!";
         } else {
@@ -231,21 +286,15 @@ function enviar_relatorio_rh($reportsDir, $silent = false) {
             $mail->Password   = $_ENV['SMTP_PASS'];
             $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port       = $_ENV['SMTP_PORT'];
-
             $mail->setFrom($_ENV['SMTP_USER'], 'DigitalSat Sistema');
-            $destinatario = $_ENV['REPORT_DESTINATION'] ?? 'rh@digitalsat.com.br';
-            $mail->addAddress($destinatario);
-            
+            $mail->addAddress($_ENV['REPORT_DESTINATION'] ?? 'rh@digitalsat.com.br');
             $mail->isHTML(true);
             $mail->Subject = "[AUTOMÁTICO] Relatório Semanal de Treinamentos - " . date('d/m/Y');
-            $mail->Body = "Olá RH,<br><br>Este é o relatório semanal automático contendo todos os registros de treinamentos.<br>Anexo atualizado em: " . date('d/m/Y H:i');
-            
+            $mail->Body = "Olá RH,<br><br>Este é o relatório semanal automático.<br>Anexo atualizado em: " . date('d/m/Y H:i');
             $mail->addAttachment($arquivo, 'relatorio_semanal_' . date('Ymd') . '.csv');
             $mail->send();
-            
             if (!$silent) echo "✅ Relatório enviado com sucesso!";
         }
-        
         if (!$silent) exit;
         return true;
     } catch (Exception $e) {

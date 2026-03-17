@@ -41,7 +41,9 @@ COPY --from=builder /app/vendor ./vendor
 
 # Copiar código fonte da aplicação
 COPY public ./public
+# Criar diretório de relatórios (caso não exista no build)
+RUN mkdir -p /var/www/html/reports
 
-# Ajustar permissões
-RUN chown -R www-data:www-data /var/www/html/public && \
-    chmod -R 755 /var/www/html/public
+# Ajustar permissões para o usuário do Apache (www-data)
+RUN chown -R www-data:www-data /var/www/html/public /var/www/html/reports && \
+    chmod -R 775 /var/www/html/public /var/www/html/reports
