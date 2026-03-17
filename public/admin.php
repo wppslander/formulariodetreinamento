@@ -1,15 +1,12 @@
 <?php
 /**
- * ADMIN.PHP - Painel Analítico e Administrativo do RH
- * Acesso protegido: admin.php?token=SEU_TOKEN
+ * ADMIN2.PHP - Painel Administrativo via SQLite (Melhorado com Busca por Nome/Email)
+ * Acesso: admin.php?token=QsEtSkL7YGjAz5u
  */
 
-// Define Caminhos Base
 define('BASE_PATH', dirname(__DIR__));
-define('REPORTS_DIR', BASE_PATH . '/reports');
 require_once BASE_PATH . '/vendor/autoload.php';
 
-// 1. Carregar Variáveis de Ambiente (.env)
 if (file_exists(BASE_PATH . '/.env')) {
     $dotenv = Dotenv\Dotenv::createImmutable(BASE_PATH);
     $dotenv->safeLoad();
@@ -18,277 +15,226 @@ if (file_exists(BASE_PATH . '/.env')) {
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
 
-// 2. Segurança do Token
-$token_valido = $_ENV['ADMIN_TOKEN'] ?? 'digitalsat_segredo';
+// 1. Segurança do Token
+$token_valido = "QsEtSkL7YGjAz5u";
 $token_recebido = $_GET['token'] ?? '';
 
 if ($token_recebido !== $token_valido) {
     header('HTTP/1.0 403 Forbidden');
-    die("Acesso Negado: Token inválido.");
+    die("Acesso Negado.");
 }
 
-// 3. Rotinas Automáticas (Envio Semanal)
-verificar_e_enviar_relatorio_semanal(REPORTS_DIR);
+$db = conectar_db();
+if (!$db) die("Erro ao conectar ao banco de dados.");
 
-// 4. Ações Simples (Download e E-mail)
+$reports_dir = dirname(__DIR__) . '/reports';
+
+// Rotinas Automáticas (Envio Semanal)
+verificar_e_enviar_relatorio_semanal($reports_dir);
+
+// 2. Ações (Validar / Excluir / Download / Email)
 if (isset($_GET['action'])) {
+    $id = intval($_GET['id'] ?? 0);
+    
+    // Ações de Registro Individual
+    if ($_GET['action'] === 'validar' && $id > 0) {
+        $db->prepare("UPDATE treinamentos SET status = 'Validado' WHERE id = ?")->execute([$id]);
+        atualizar_status_treinamento("tr_$id", 'Validado', $reports_dir); // Mantém sync com CSV se existir
+        registrar_audit_admin('Validar Treinamento (DB)', $id, $reports_dir);
+        header("Location: admin.php?token=$token_recebido&msg=validado"); exit;
+    }
+    if ($_GET['action'] === 'excluir' && $id > 0) {
+        $db->prepare("DELETE FROM treinamentos WHERE id = ?")->execute([$id]);
+        excluir_treinamento("tr_$id", $reports_dir); // Mantém sync com CSV se existir
+        registrar_audit_admin('Excluir Treinamento (DB)', $id, $reports_dir);
+        header("Location: admin.php?token=$token_recebido&msg=excluido"); exit;
+    }
+
+    // Ações Globais
     if ($_GET['action'] === 'download_csv') {
-        $arquivo = REPORTS_DIR . '/treinamentos_master.csv';
-        if (file_exists($arquivo)) {
-            header('Content-Type: text/csv');
-            header('Content-Disposition: attachment; filename="treinamentos_master_' . date('Ymd') . '.csv"');
-            registrar_audit_admin('Download CSV', 'Geral', REPORTS_DIR);
-            readfile($arquivo);
-            exit;
-        } else {
-            die("Erro: Arquivo não encontrado.");
+        $sql_export = "SELECT t.id, t.data_hora, t.nome, t.email, f.nome as filial, d.nome as departamento, t.curso, m.nome as modalidade, t.duracao_minutos, t.status, t.ip_origem 
+                       FROM treinamentos t
+                       JOIN filiais f ON t.filial_id = f.id
+                       JOIN departamentos d ON t.departamento_id = d.id
+                       JOIN modalidades m ON t.modalidade_id = m.id
+                       ORDER BY t.data_hora DESC";
+        $stmt = $db->query($sql_export);
+        $registros = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="treinamentos_export_' . date('Ymd_Hi') . '.csv"');
+        
+        $output = fopen('php://output', 'w');
+        // BOM for Excel
+        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+        
+        // Header
+        fputcsv($output, ['ID', 'Data/Hora', 'Nome', 'Email', 'Filial', 'Departamento', 'Treinamento', 'Modalidade', 'Duração (Minutos)', 'Status', 'IP Origem'], ';');
+        
+        // Data
+        foreach ($registros as $row) {
+            fputcsv($output, [
+                $row['id'],
+                $row['data_hora'],
+                $row['nome'],
+                $row['email'],
+                $row['filial'],
+                $row['departamento'],
+                $row['curso'],
+                $row['modalidade'],
+                $row['duracao_minutos'],
+                $row['status'],
+                $row['ip_origem']
+            ], ';');
         }
+        
+        fclose($output);
+        registrar_audit_admin('Download CSV (Gerado DB)', 'Geral', $reports_dir);
+        exit;
     }
     if ($_GET['action'] === 'enviar_relatorio') {
-        enviar_relatorio_rh(REPORTS_DIR);
-        registrar_audit_admin('Disparo Manual E-mail RH', 'Geral', REPORTS_DIR);
-    }
-    if ($_GET['action'] === 'validar' && isset($_GET['id'])) {
-        atualizar_status_treinamento($_GET['id'], 'Validado', REPORTS_DIR);
-        registrar_audit_admin('Validar Treinamento', $_GET['id'], REPORTS_DIR);
-        header("Location: admin.php?token=$token_recebido&msg=validado");
-        exit;
-    }
-    if ($_GET['action'] === 'excluir' && isset($_GET['id'])) {
-        excluir_treinamento($_GET['id'], REPORTS_DIR);
-        registrar_audit_admin('Excluir Treinamento', $_GET['id'], REPORTS_DIR);
-        header("Location: admin.php?token=$token_recebido&msg=excluido");
-        exit;
+        enviar_relatorio_rh($reports_dir);
+        registrar_audit_admin('Disparo Manual E-mail RH (DB)', 'Geral', $reports_dir);
+        header("Location: admin.php?token=$token_recebido&msg=enviado"); exit;
     }
 }
 
-// 5. Mensagens de Feedback
+// Mensagens de Feedback
 $feedback_msg = '';
 if (isset($_GET['msg'])) {
-    if ($_GET['msg'] === 'validado') $feedback_msg = '<div class="alert alert-success">Treinamento validado com sucesso!</div>';
-    if ($_GET['msg'] === 'excluido') $feedback_msg = '<div class="alert alert-danger">Registro removido com sucesso.</div>';
+    if ($_GET['msg'] === 'validado') $feedback_msg = '<div class="alert alert-success mt-3 mb-0">Treinamento validado com sucesso!</div>';
+    if ($_GET['msg'] === 'excluido') $feedback_msg = '<div class="alert alert-danger mt-3 mb-0">Registro removido com sucesso.</div>';
+    if ($_GET['msg'] === 'enviado') $feedback_msg = '<div class="alert alert-info mt-3 mb-0">Relatório enviado por e-mail com sucesso!</div>';
 }
 
-// 6. Captura de Filtros e Ordenação (GET)
-$filtro_inicio = $_GET['data_inicio'] ?? '';
-$filtro_fim = $_GET['data_fim'] ?? '';
-$filtro_filial = $_GET['filial'] ?? '';
-$ordenacao = $_GET['ordenacao'] ?? 'data_desc'; // Padrão: Mais recentes
+// 3. Filtros, Busca e Ordenação
+$f_inicio = $_GET['data_inicio'] ?? '';
+$f_fim = $_GET['data_fim'] ?? '';
+$f_filial = $_GET['filial'] ?? '';
+$f_busca = trim($_GET['busca'] ?? ''); // Novo: Filtro de Busca (Nome ou Email)
+$ordenacao = $_GET['ordenacao'] ?? 'novo';
 
-// 7. Processamento e Leitura do CSV
-$registros = [];
-$stats = [
-    'total_treinamentos' => 0,
-    'total_minutos' => 0,
-    'por_filial' => [],
-    'por_tipo' => []
-];
+// 4. Query de Estatísticas (Globais para os KPIs)
+$stats_geral = $db->query("SELECT 
+    COUNT(*) as total, 
+    SUM(duracao_minutos) as minutos,
+    SUM(CASE WHEN status = 'Validado' THEN 1 ELSE 0 END) as validados,
+    SUM(CASE WHEN status = 'Pendente' THEN 1 ELSE 0 END) as pendentes
+    FROM treinamentos")->fetch();
 
-$arquivo = REPORTS_DIR . '/treinamentos_master.csv';
-if (file_exists($arquivo)) {
-    $handle = fopen($arquivo, 'r');
-    if ($handle) {
-        fseek($handle, 3); // Pula BOM
-        $header = fgetcsv($handle, 0, ';');
-        
-        while (($data = fgetcsv($handle, 0, ';')) !== FALSE) {
-            // Ajuste para suportar arquivos antigos e novos (compatibilidade)
-            if (count($data) >= 8) {
-                // Se o arquivo for antigo (sem ID no início), o count será 9 (sem ID, sem Status)
-                // Se o arquivo for novo, o count será 11
-                if (count($data) == 9) {
-                    // Mapeamento antigo: Data/Hora, Nome, Email, Filial, Departamento, Curso, Tipo, Duracao_Minutos, IP
-                    $row = [
-                        'ID' => 'legacy_' . md5($data[0] . $data[2]), // ID gerado na hora
-                        'Data/Hora' => $data[0],
-                        'Nome' => $data[1],
-                        'Email' => $data[2],
-                        'Filial' => $data[3],
-                        'Departamento' => $data[4],
-                        'Curso' => $data[5],
-                        'Tipo' => $data[6],
-                        'Duracao_Minutos' => $data[7],
-                        'Status' => 'Pendente',
-                        'IP' => $data[8]
-                    ];
-                } else {
-                    $row = array_combine($header, $data);
-                }
-                
-                // Aplicar Filtros
-                $data_treinamento = substr($row['Data/Hora'], 0, 10); // Pega só YYYY-MM-DD
-                
-                if ($filtro_inicio && $data_treinamento < $filtro_inicio) continue;
-                if ($filtro_fim && $data_treinamento > $filtro_fim) continue;
-                if ($filtro_filial && $row['Filial'] !== $filtro_filial) continue;
+// Dados para Gráficos
+$data_filiais = $db->query("SELECT f.nome, COUNT(t.id) as total FROM treinamentos t JOIN filiais f ON t.filial_id = f.id GROUP BY f.id ORDER BY total DESC")->fetchAll();
+$data_modalidades = $db->query("SELECT m.nome, COUNT(t.id) as total FROM treinamentos t JOIN modalidades m ON t.modalidade_id = m.id GROUP BY m.id")->fetchAll();
 
-                $registros[] = $row;
+$chart_filiais_labels = json_encode(array_column($data_filiais, 'nome'));
+$chart_filiais_data = json_encode(array_column($data_filiais, 'total'));
 
-                // Agregação para Estatísticas
-                $stats['total_treinamentos']++;
-                $stats['total_minutos'] += intval($row['Duracao_Minutos']);
-                
-                $filial = $row['Filial'];
-                $stats['por_filial'][$filial] = ($stats['por_filial'][$filial] ?? 0) + 1;
-                
-                $tipo = $row['Tipo'];
-                $stats['por_tipo'][$tipo] = ($stats['por_tipo'][$tipo] ?? 0) + 1;
-            }
-        }
-        fclose($handle);
-        
-        // Aplica a Ordenação Solicitada
-        usort($registros, function($a, $b) use ($ordenacao) {
-            switch ($ordenacao) {
-                case 'data_asc':
-                    return strtotime($a['Data/Hora']) <=> strtotime($b['Data/Hora']);
-                case 'duracao_desc':
-                    return intval($b['Duracao_Minutos']) <=> intval($a['Duracao_Minutos']);
-                case 'duracao_asc':
-                    return intval($a['Duracao_Minutos']) <=> intval($b['Duracao_Minutos']);
-                case 'data_desc':
-                default:
-                    return strtotime($b['Data/Hora']) <=> strtotime($a['Data/Hora']);
-            }
-        });
-    }
+$chart_tipos_labels = json_encode(array_column($data_modalidades, 'nome'));
+$chart_tipos_data = json_encode(array_column($data_modalidades, 'total'));
+
+// 5. Query Principal (Com Filtros e Busca)
+$where = ["1=1"];
+$params = [];
+if ($f_inicio) { $where[] = "date(t.data_hora) >= ?"; $params[] = $f_inicio; }
+if ($f_fim) { $where[] = "date(t.data_hora) <= ?"; $params[] = $f_fim; }
+if ($f_filial) { $where[] = "f.slug = ?"; $params[] = $f_filial; }
+
+// Adicionando a busca por Nome ou Email via LIKE
+if (!empty($f_busca)) {
+    $where[] = "(t.nome LIKE ? OR t.email LIKE ?)";
+    $params[] = "%$f_busca%";
+    $params[] = "%$f_busca%";
 }
 
-// 8. Paginação e Fatiamento
-$itens_por_pagina = 50;
-$total_registros_filtrados = count($registros);
-$total_paginas = ceil($total_registros_filtrados / $itens_por_pagina);
-$pagina_atual = max(1, intval($_GET['page'] ?? 1));
-$offset = ($pagina_atual - 1) * $itens_por_pagina;
+$order_sql = "t.data_hora DESC";
+if ($ordenacao === 'antigo') $order_sql = "t.data_hora ASC";
+if ($ordenacao === 'duracao') $order_sql = "t.duracao_minutos DESC";
 
-$registros_paginados = array_slice($registros, $offset, $itens_por_pagina);
+$sql = "SELECT t.*, f.nome as filial_nome, d.nome as depto_nome, m.nome as modalidade_nome 
+        FROM treinamentos t
+        JOIN filiais f ON t.filial_id = f.id
+        JOIN departamentos d ON t.departamento_id = d.id
+        JOIN modalidades m ON t.modalidade_id = m.id
+        WHERE " . implode(" AND ", $where) . "
+        ORDER BY $order_sql";
 
-// Cálculos de Tempo Formato Amigável
-$horas_totais = floor($stats['total_minutos'] / 60);
-$minutos_restantes = $stats['total_minutos'] % 60;
-$tempo_formatado = "{$horas_totais}h {$minutos_restantes}m";
+$stmt = $db->prepare($sql);
+$stmt->execute($params);
+$registros = $stmt->fetchAll();
 
-// Prepara dados para os Gráficos (JSON)
-$chart_filiais_labels = json_encode(array_keys($stats['por_filial']));
-$chart_filiais_data = json_encode(array_values($stats['por_filial']));
-
-$chart_tipos_labels = json_encode(array_keys($stats['por_tipo']));
-$chart_tipos_data = json_encode(array_values($stats['por_tipo']));
-
-// Coleta lista única de filiais para o select do filtro
-$todas_filiais_existentes = array_keys($stats['por_filial']);
-if (empty($filtro_filial)) {
-    // Se não há filtro, as filiais retornadas na agregação já são todas
-    $filiais_dropdown = $todas_filiais_existentes;
-} else {
-    // Se há filtro, precisamos ler o arquivo de novo ou usar a variável global $filiais_permitidas de config.php
-    $filiais_dropdown = array_values($filiais_permitidas ?? []);
-}
+$tempo_total = exibir_duracao_formatada($stats_geral['minutos'] ?? 0);
 ?>
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RH - Dashboard Analítico | DigitalSat</title>
+    <title>RH - Dashboard v2 SQL | DigitalSat</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <!-- Chart.js para Gráficos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     <style>
-        body { background-color: #f4f6f9; font-family: 'Roboto', sans-serif; }
-        .admin-header { background-color: #252224; color: #fff; padding: 20px 0; margin-bottom: 30px; }
-        .card { border-radius: 12px; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.05); transition: transform 0.2s; }
-        .card:hover { transform: translateY(-3px); }
-        .stat-value { font-size: 2.5rem; font-weight: 700; color: #DC0C15; line-height: 1; }
-        .stat-label { color: #6c757d; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 500; margin-top: 10px; }
-        .table-responsive { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        .badge-duracao { background-color: #e9ecef; color: #495057; font-weight: 500; }
-        .filter-bar { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        body { background: #f4f6f9; font-family: 'Roboto', sans-serif; }
+        .header { background: #252224; color: #fff; padding: 25px 0; margin-bottom: 30px; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .stat-value { font-size: 2.2rem; font-weight: 700; color: #DC0C15; line-height: 1; }
+        .stat-label { color: #6c757d; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-top: 10px; }
+        .table-box { background: #fff; border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .filter-bar { background: white; padding: 25px; border-radius: 12px; margin-bottom: 30px; border-top: 4px solid #DC0C15; }
+        .badge-pendente { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .badge-validado { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
     </style>
 </head>
 <body>
 
-<div class="admin-header shadow-sm">
-    <div class="container d-flex justify-content-between align-items-center flex-wrap gap-3">
+<div class="header shadow-sm">
+    <div class="container d-flex justify-content-between align-items-center">
         <h3 class="mb-0 d-flex align-items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" class="bi bi-bar-chart-line-fill" viewBox="0 0 16 16">
-              <path d="M11 2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12h.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1 0-1H1v-3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1V7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7h1V2zm1 12h2V2h-2v12zm-3 0V7H7v7h2zm-5 0v-3H2v3h2z"/>
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" class="bi bi-cpu" viewBox="0 0 16 16">
+              <path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5V11.5A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5V4.5A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3zM6.5 6a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
             </svg>
-            Dashboard de Treinamentos
+            Dashboard de Treinamentos (v2 SQL)
         </h3>
         <div>
             <a href="?token=<?php echo $token_recebido; ?>&action=download_csv" class="btn btn-light btn-sm me-2 fw-medium shadow-sm">📥 Exportar CSV</a>
-            <a href="?token=<?php echo $token_recebido; ?>&action=enviar_relatorio" class="btn btn-outline-light btn-sm fw-medium">📧 Disparar P/ RH</a>
+            <a href="?token=<?php echo $token_recebido; ?>&action=enviar_relatorio" class="btn btn-outline-light btn-sm fw-medium me-3">📧 Disparar P/ RH</a>
+            <span class="badge bg-danger rounded-pill px-3">SQLite Engine</span>
         </div>
     </div>
 </div>
 
 <div class="container pb-5">
-    
-    <!-- Mensagens de Feedback -->
     <?php echo $feedback_msg; ?>
 
-    <!-- Barra de Filtros -->
-    <div class="filter-bar">
-        <form method="GET" action="" class="row g-3 align-items-end">
-            <input type="hidden" name="token" value="<?php echo $token_recebido; ?>">
-            <div class="col-md-3">
-                <label class="form-label text-muted small fw-bold">Data Início</label>
-                <input type="date" class="form-control" name="data_inicio" value="<?php echo htmlspecialchars($filtro_inicio); ?>">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label text-muted small fw-bold">Data Fim</label>
-                <input type="date" class="form-control" name="data_fim" value="<?php echo htmlspecialchars($filtro_fim); ?>">
-            </div>
-            <div class="col-md-3">
-                <label class="form-label text-muted small fw-bold">Filial</label>
-                <select class="form-select" name="filial">
-                    <option value="">Todas as Filiais</option>
-                    <?php 
-                    $todas = array_values($filiais_permitidas ?? []);
-                    foreach ($todas as $f): 
-                        $selected = ($filtro_filial === $f) ? 'selected' : '';
-                    ?>
-                        <option value="<?php echo $f; ?>" <?php echo $selected; ?>><?php echo $f; ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label text-muted small fw-bold">Ordenar por</label>
-                <select class="form-select" name="ordenacao">
-                    <option value="data_desc" <?php echo $ordenacao === 'data_desc' ? 'selected' : ''; ?>>Mais Recentes</option>
-                    <option value="data_asc" <?php echo $ordenacao === 'data_asc' ? 'selected' : ''; ?>>Mais Antigos</option>
-                    <option value="duracao_desc" <?php echo $ordenacao === 'duracao_desc' ? 'selected' : ''; ?>>Maior Duração</option>
-                    <option value="duracao_asc" <?php echo $ordenacao === 'duracao_asc' ? 'selected' : ''; ?>>Menor Duração</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-dark w-100 fw-bold">Filtrar</button>
-            </div>
-        </form>
-    </div>
-
-    <!-- Cards de KPI -->
+    <!-- KPI Cards -->
     <div class="row g-4 mb-4">
-        <div class="col-md-6">
-            <div class="card h-100 p-4 text-center">
-                <div class="stat-value"><?php echo $stats['total_treinamentos']; ?></div>
-                <div class="stat-label">Cursos Concluídos</div>
+        <div class="col-md-3">
+            <div class="card p-4 text-center">
+                <div class="stat-value"><?php echo $stats_geral['total']; ?></div>
+                <div class="stat-label">Total Registros</div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card h-100 p-4 text-center">
-                <div class="stat-value text-dark"><?php echo $tempo_formatado; ?></div>
-                <div class="stat-label">Carga Horária Total Investida</div>
+        <div class="col-md-3">
+            <div class="card p-4 text-center">
+                <div class="stat-value text-dark"><?php echo $tempo_total; ?></div>
+                <div class="stat-label">Carga Horária Total</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-4 text-center border-start border-4 border-success">
+                <div class="stat-value text-success"><?php echo $stats_geral['validados'] ?? 0; ?></div>
+                <div class="stat-label">Validados</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-4 text-center border-start border-4 border-warning">
+                <div class="stat-value text-warning"><?php echo $stats_geral['pendentes'] ?? 0; ?></div>
+                <div class="stat-label">Pendentes</div>
             </div>
         </div>
     </div>
 
     <!-- Gráficos -->
-    <?php if ($stats['total_treinamentos'] > 0): ?>
+    <?php if ($stats_geral['total'] > 0): ?>
     <div class="row g-4 mb-4">
         <div class="col-md-8">
             <div class="card h-100 p-3">
@@ -309,105 +255,121 @@ if (empty($filtro_filial)) {
     </div>
     <?php endif; ?>
 
-    <!-- Tabela de Registros -->
-    <h5 class="mb-3 mt-5 text-secondary fw-bold">Detalhamento dos Registros</h5>
-    <?php if (empty($registros)): ?>
-        <div class="alert alert-warning text-center border-0 shadow-sm">Nenhum treinamento encontrado para os filtros aplicados.</div>
-    <?php else: ?>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Data/Hora</th>
-                        <th>Colaborador</th>
-                        <th>Local</th>
-                        <th>Treinamento</th>
-                        <th class="text-center">Duração</th>
-                        <th class="text-center">Status</th>
-                        <th class="text-center">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($registros_paginados as $reg): ?>
-                        <tr>
-                            <td class="small text-muted" style="white-space: nowrap;"><?php echo date('d/m/Y H:i', strtotime($reg['Data/Hora'])); ?></td>
-                            <td>
-                                <div class="fw-bold text-dark"><?php echo htmlspecialchars($reg['Nome']); ?></div>
-                                <div class="small text-muted"><?php echo htmlspecialchars($reg['Email']); ?></div>
-                                <div class="small text-muted fst-italic"><?php echo htmlspecialchars($reg['Departamento']); ?></div>
-                            </td>
-                            <td>
-                                <span class="d-block text-dark"><?php echo htmlspecialchars($reg['Filial']); ?></span>
-                                <span class="badge bg-light text-secondary border"><?php echo htmlspecialchars($reg['Tipo']); ?></span>
-                            </td>
-                            <td class="fw-medium text-dark"><?php echo htmlspecialchars($reg['Curso']); ?></td>
-                            <td class="text-center">
-                                <span class="badge badge-duracao rounded-pill px-3 py-2">
-                                    <?php 
-                                        $m = intval($reg['Duracao_Minutos']);
-                                        echo floor($m/60) . 'h ' . ($m%60) . 'm';
-                                    ?>
-                                </span>
-                            </td>
-                            <td class="text-center">
-                                <?php if (($reg['Status'] ?? 'Pendente') === 'Validado'): ?>
-                                    <span class="badge bg-success">Validado</span>
-                                <?php else: ?>
-                                    <span class="badge bg-warning text-dark">Pendente</span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="text-center">
-                                <div class="btn-group btn-group-sm shadow-sm">
-                                    <?php if (($reg['Status'] ?? 'Pendente') !== 'Validado'): ?>
-                                        <a href="?token=<?php echo $token_recebido; ?>&action=validar&id=<?php echo $reg['ID']; ?>" 
-                                           class="btn btn-outline-success" title="Validar Certificado">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-lg" viewBox="0 0 16 16">
-                                              <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425z"/>
-                                            </svg>
-                                        </a>
-                                    <?php endif; ?>
-                                    <a href="?token=<?php echo $token_recebido; ?>&action=excluir&id=<?php echo $reg['ID']; ?>" 
-                                       class="btn btn-outline-danger" title="Excluir Registro"
-                                       onclick="return confirm('Tem certeza que deseja remover este registro permanentemente?')">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
-                                          <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.935 16h6.13a2 2 0 0 0 1.987-1.84L13.902 3.5h.538a.5.5 0 0 0 0-1zm-5 11.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 1 0v8.5zm2 0a.5.5 0 0 1-1 0V5a.5.5 0 0 1 1 0v8.5zm2 0a.5.5 0 0 1-1 0V5a.5.5 0 0 1 1 0v8.5z"/>
-                                        </svg>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
+    <!-- Barra de Filtros e Busca -->
+    <div class="filter-bar shadow-sm">
+        <form class="row g-3 align-items-end">
+            <input type="hidden" name="token" value="<?php echo $token_recebido; ?>">
+            
+            <!-- Novo: Campo de Busca -->
+            <div class="col-md-3">
+                <label class="small fw-bold text-muted">Buscar Colaborador</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-search" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg></span>
+                    <input type="text" name="busca" class="form-control border-start-0 ps-0" placeholder="Nome ou E-mail..." value="<?php echo htmlspecialchars($f_busca); ?>">
+                </div>
+            </div>
+
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Data Início</label>
+                <input type="date" name="data_inicio" class="form-control" value="<?php echo $f_inicio; ?>">
+            </div>
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Data Fim</label>
+                <input type="date" name="data_fim" class="form-control" value="<?php echo $f_fim; ?>">
+            </div>
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Filial</label>
+                <select name="filial" class="form-select">
+                    <option value="">Todas</option>
+                    <?php foreach($filiais_permitidas as $s => $n): ?>
+                        <option value="<?php echo $s; ?>" <?php echo $f_filial==$s?'selected':''; ?>><?php echo $n; ?></option>
                     <?php endforeach; ?>
-                </tbody>
-                </table>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="small fw-bold text-muted">Ordem</label>
+                <select name="ordenacao" class="form-select">
+                    <option value="novo" <?php echo $ordenacao=='novo'?'selected':''; ?>>Mais Recentes</option>
+                    <option value="antigo" <?php echo $ordenacao=='antigo'?'selected':''; ?>>Mais Antigos</option>
+                    <option value="duracao" <?php echo $ordenacao=='duracao'?'selected':''; ?>>Carga Horária</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-dark w-100 fw-bold">OK</button>
+            </div>
+        </form>
+    </div>
 
-                <!-- Navegação da Paginação -->
-                <?php if ($total_paginas > 1): ?>
-                <nav class="mt-4">
-                    <ul class="pagination justify-content-center">
-                        <li class="page-item <?php echo $pagina_atual <= 1 ? 'disabled' : ''; ?>">
-                            <a class="page-link" href="?token=<?php echo $token_recebido; ?>&page=<?php echo $pagina_atual - 1; ?>&data_inicio=<?php echo $filtro_inicio; ?>&data_fim=<?php echo $filtro_fim; ?>&filial=<?php echo $filtro_filial; ?>&ordenacao=<?php echo $ordenacao; ?>">Anterior</a>
-                        </li>
+    <!-- Tabela -->
+    <div class="table-box">
+        <h5 class="mb-4 text-secondary fw-bold">Detalhamento dos Registros</h5>
+        <?php if (empty($registros)): ?>
+            <div class="alert alert-warning text-center py-5 border-0 shadow-sm">
+                <h5 class="mb-0">Nenhum registro encontrado para os filtros aplicados.</h5>
+            </div>
+        <?php else: ?>
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Data/Hora</th>
+                    <th>Colaborador</th>
+                    <th>Unidade/Setor</th>
+                    <th>Treinamento</th>
+                    <th class="text-center">Duração</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-center">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach($registros as $r): ?>
+                <tr>
+                    <td class="small text-muted"><?php echo date('d/m/Y H:i', strtotime($r['data_hora'])); ?></td>
+                    <td>
+                        <div class="fw-bold text-dark"><?php echo htmlspecialchars($r['nome']); ?></div>
+                        <div class="small text-muted"><?php echo htmlspecialchars($r['email']); ?></div>
+                    </td>
+                    <td>
+                        <div class="text-dark fw-medium small"><?php echo $r['filial_nome']; ?></div>
+                        <div class="small text-muted"><?php echo $r['depto_nome']; ?></div>
+                    </td>
+                    <td class="fw-medium text-dark"><?php echo htmlspecialchars($r['curso']); ?></td>
+                    <td class="text-center">
+                        <span class="badge bg-light text-dark border rounded-pill px-3"><?php echo exibir_duracao_formatada($r['duracao_minutos']); ?></span>
+                    </td>
+                    <td class="text-center">
+                        <?php if($r['status'] === 'Validado'): ?>
+                            <span class="badge badge-validado rounded-pill px-3">Validado</span>
+                        <?php else: ?>
+                            <span class="badge badge-pendente rounded-pill px-3 text-warning">Pendente</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="text-center">
+                        <div class="btn-group btn-group-sm">
+                            <?php if($r['status'] !== 'Validado'): ?>
+                                <a href="?token=<?php echo $token_recebido; ?>&action=validar&id=<?php echo $r['id']; ?>&busca=<?php echo urlencode($f_busca); ?>&filial=<?php echo $f_filial; ?>" class="btn btn-outline-success" title="Validar">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check-lg" viewBox="0 0 16 16">
+                                      <path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425z"/>
+                                    </svg>
+                                </a>
+                            <?php endif; ?>
+                            <a href="?token=<?php echo $token_recebido; ?>&action=excluir&id=<?php echo $r['id']; ?>&busca=<?php echo urlencode($f_busca); ?>&filial=<?php echo $f_filial; ?>" class="btn btn-outline-danger" onclick="return confirm('Excluir este registro?')" title="Excluir">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16">
+                                  <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.935 16h6.13a2 2 0 0 0 1.987-1.84L13.902 3.5h.538a.5.5 0 0 0 0-1zm-5 11.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 1 0v8.5zm2 0a.5.5 0 0 1-1 0V5a.5.5 0 0 1 1 0v8.5zm2 0a.5.5 0 0 1-1 0V5a.5.5 0 0 1 1 0v8.5z"/>
+                                </svg>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+    </div>
 
-                        <li class="page-item disabled">
-                            <span class="page-link text-dark fw-bold">Página <?php echo $pagina_atual; ?> de <?php echo $total_paginas; ?></span>
-                        </li>
-
-                        <li class="page-item <?php echo $pagina_atual >= $total_paginas ? 'disabled' : ''; ?>">
-                            <a class="page-link" href="?token=<?php echo $token_recebido; ?>&page=<?php echo $pagina_atual + 1; ?>&data_inicio=<?php echo $filtro_inicio; ?>&data_fim=<?php echo $filtro_fim; ?>&filial=<?php echo $filtro_filial; ?>&ordenacao=<?php echo $ordenacao; ?>">Próxima</a>
-                        </li>
-                    </ul>
-                </nav>
-                <?php endif; ?>
-
-                <div class="text-center text-muted small mt-3">
-                Exibindo <?php echo count($registros_paginados); ?> de <?php echo $total_registros_filtrados; ?> registros.
-                </div>
-                </div>
-                <?php endif; ?>
 </div>
 
 <!-- Script dos Gráficos -->
-<?php if ($stats['total_treinamentos'] > 0): ?>
+<?php if ($stats_geral['total'] > 0): ?>
 <script>
     // Paleta de Cores DigitalSat + Elegantes
     const colors = ['#DC0C15', '#252224', '#4a4e69', '#6c757d', '#adb5bd', '#e9ecef', '#ced4da'];
@@ -448,10 +410,8 @@ if (empty($filtro_filial)) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 12 } }
-            },
-            cutout: '70%'
+            plugins: { legend: { position: 'bottom' } },
+            cutout: '60%'
         }
     });
 </script>

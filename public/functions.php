@@ -6,6 +6,7 @@
 
 /**
  * Estabelece conexão com o banco de dados SQLite via PDO.
+ */
  function conectar_db() {
      $db_dir = dirname(__DIR__) . '/reports';
      $db_file = $db_dir . '/database.sqlite';
@@ -20,7 +21,6 @@
 
      try {
          $pdo = new PDO('sqlite:' . $db_file);
- ...
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         return $pdo;
@@ -262,10 +262,42 @@ function verificar_e_enviar_relatorio_semanal($reportsDir) {
  * Envia o relatório CSV por e-mail para o RH.
  */
 function enviar_relatorio_rh($reportsDir, $silent = false) {
-    $arquivo = $reportsDir . '/treinamentos_master.csv';
-    if (!file_exists($arquivo)) {
+    // 1. Gera o arquivo CSV atualizado a partir do banco de dados (SQLite)
+    $arquivo = $reportsDir . '/treinamentos_export_' . date('Ymd_His') . '.csv';
+    $db = conectar_db();
+    
+    if (!$db) {
         if ($silent) return false;
-        die("Nenhum relatório encontrado para enviar.");
+        die("Erro ao conectar ao banco para gerar o relatório.");
+    }
+
+    $sql_export = "SELECT t.id, t.data_hora, t.nome, t.email, f.nome as filial, d.nome as departamento, t.curso, m.nome as modalidade, t.duracao_minutos, t.status, t.ip_origem 
+                   FROM treinamentos t
+                   JOIN filiais f ON t.filial_id = f.id
+                   JOIN departamentos d ON t.departamento_id = d.id
+                   JOIN modalidades m ON t.modalidade_id = m.id
+                   ORDER BY t.data_hora DESC";
+    $stmt = $db->query($sql_export);
+    $registros = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $handle = fopen($arquivo, 'w');
+    if ($handle) {
+        // BOM for Excel
+        fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+        // Header
+        fputcsv($handle, ['ID', 'Data/Hora', 'Nome', 'Email', 'Filial', 'Departamento', 'Treinamento', 'Modalidade', 'Duração (Minutos)', 'Status', 'IP Origem'], ';');
+        // Dados
+        foreach ($registros as $row) {
+            fputcsv($handle, [
+                $row['id'], $row['data_hora'], $row['nome'], $row['email'], 
+                $row['filial'], $row['departamento'], $row['curso'], 
+                $row['modalidade'], $row['duracao_minutos'], $row['status'], $row['ip_origem']
+            ], ';');
+        }
+        fclose($handle);
+    } else {
+        if ($silent) return false;
+        die("Erro ao gerar o arquivo de relatório.");
     }
 
     $mail = new PHPMailer\PHPMailer\PHPMailer(true);
@@ -275,6 +307,7 @@ function enviar_relatorio_rh($reportsDir, $silent = false) {
             $mock_content = "<h2>MOCK RELATÓRIO AUTOMÁTICO RH</h2><hr>";
             $mock_content .= "<strong>Para:</strong> {$destinatario}<hr>";
             $mock_content .= "<strong>Assunto:</strong> [AUTOMÁTICO] Relatório Semanal de Treinamentos - " . date('d/m/Y') . "<br>";
+            $mock_content .= "<strong>Anexo Gerado:</strong> " . basename($arquivo) . "<br>";
             file_put_contents(dirname(__DIR__) . '/public/email_mock_relatorio.html', $mock_content);
             if (!$silent) echo "✅ MOCK: Relatório gerado em email_mock_relatorio.html!";
         } else {
@@ -295,6 +328,12 @@ function enviar_relatorio_rh($reportsDir, $silent = false) {
             $mail->send();
             if (!$silent) echo "✅ Relatório enviado com sucesso!";
         }
+        
+        // Limpa o arquivo temporário exportado
+        if (file_exists($arquivo)) {
+            unlink($arquivo);
+        }
+
         if (!$silent) exit;
         return true;
     } catch (Exception $e) {

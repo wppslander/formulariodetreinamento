@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Copiar arquivos de definição
-COPY composer.json composer.lock ./
+COPY composer.json composer.lock* ./
 
 # Instalar dependências PHP (Sem dev, otimizado)
 RUN composer install --no-dev --optimize-autoloader --no-scripts
